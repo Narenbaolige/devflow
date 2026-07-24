@@ -30,9 +30,12 @@ class Settings:
         "CHATANYWHERE_BASE_URL", "https://api.chatanywhere.tech/v1"
     )
 
-    # Docker
-    DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11-slim")
+    # Sandbox
+    SANDBOX_MODE: str = os.getenv("SANDBOX_MODE", "local")
     SANDBOX_TIMEOUT_SECONDS: int = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "300"))
+
+    # Docker (仅 SANDBOX_MODE=docker 时生效)
+    DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11")
     SANDBOX_MAX_MEMORY_MB: int = int(os.getenv("SANDBOX_MAX_MEMORY_MB", "512"))
     SANDBOX_MAX_CPUS: int = int(os.getenv("SANDBOX_MAX_CPUS", "1"))
 

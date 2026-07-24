@@ -99,9 +99,18 @@ async def apply_patches(state: TeamState) -> TeamState:
 
 async def run_tests(state: TeamState) -> TeamState:
     """测试执行节点 → 沙箱操作 [C]"""
+    # TODO Day 3: 切换为 Agent 驱动的沙箱调用。
+    #
+    # 沙箱只提供 execute(command)，Agent 决定测试策略：
+    #   sandbox = create_sandbox()
+    #   sandbox.execute("git clone --depth 1 --branch main URL repo")
+    #   sandbox.execute("pip install -e .", cwd="repo", timeout=180)
+    #   r = sandbox.execute("python -m pytest -v", cwd="repo")
+    #   # Agent 自行解读 r.stdout，决定下一步
+    #   # 遇到 C++ 项目就调 MSBuild，遇到 Rust 就调 cargo test
+
     from contracts.sandbox_result import SandboxResult, TestSummary
 
-    # Mock 测试结果
     state["sandbox_results"].append(
         SandboxResult(
             execution_id=str(uuid.uuid4()),
