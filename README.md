@@ -41,7 +41,10 @@ pip install -e ".[dev]"
 cp .env.example .env
 # 编辑 .env，填入 LLM API Key（支持 OpenAI / DeepSeek / ChatAnywhere）
 
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Windows + PostgreSQL Checkpointer：使用兼容 psycopg 的启动入口
+python -m app.run
+# 本地内存 Checkpointer 开发时，也可使用：
+# uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 启动后验证：

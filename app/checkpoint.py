@@ -24,9 +24,14 @@ async def managed_checkpointer() -> AsyncIterator[object]:
 
     try:
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-    except ImportError as exc:
+    except ModuleNotFoundError as exc:
         raise RuntimeError(
             "PostgreSQL Checkpointer 未安装；请执行 pip install -e '.[dev]'"
+        ) from exc
+    except ImportError as exc:
+        raise RuntimeError(
+            "PostgreSQL 驱动不可用；请安装 psycopg 二进制依赖："
+            "pip install 'psycopg[binary]>=3.2.0'"
         ) from exc
 
     async with AsyncPostgresSaver.from_conn_string(settings.CHECKPOINTER_DATABASE_URL) as saver:

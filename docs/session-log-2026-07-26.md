@@ -70,4 +70,8 @@ CHECKPOINTER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devflow
 | 应用真实 Patch | C 提供沙箱执行能力，A 接入工作流节点 | 待集成 |
 | 执行真实测试命令 | C 提供稳定的沙箱调用约定，A 接入路由和错误处理 | 待集成 |
 | PostgreSQL 环境与恢复测试 | A | 待准备数据库后验证 |
+| Windows PostgreSQL 驱动 | A | 已补充 `psycopg[binary]` 依赖，待重新安装验证 |
+| Windows 异步事件循环 | A | 已切换为 Selector 策略，兼容 psycopg 异步连接 |
+| Windows PostgreSQL 启动 | A | 新增 `python -m app.run`，在 Uvicorn 创建事件循环前固定使用 Selector |
+| PostgreSQL 配置加载顺序 | A | 修复启动入口先读取 `.env` 再创建 settings，避免错误回退到内存 Checkpointer |
 | 处理 TestClient 弃用提示与 Pydantic 模型收集警告 | A | 可延后处理，不阻塞交付 |

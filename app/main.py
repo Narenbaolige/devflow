@@ -5,11 +5,18 @@ FastAPI 应用入口。
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 """
 
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# psycopg 的异步连接不能运行在 Windows 默认 ProactorEventLoop 上。
+# 必须在 uvicorn 创建事件循环前完成切换。
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 load_dotenv(override=True)
 
