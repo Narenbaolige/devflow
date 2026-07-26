@@ -14,6 +14,10 @@ class Settings:
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///devflow.db")
+    CHECKPOINTER_BACKEND: str = os.getenv("CHECKPOINTER_BACKEND", "memory")
+    CHECKPOINTER_DATABASE_URL: str = os.getenv(
+        "CHECKPOINTER_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/devflow"
+    )
 
     # LLM
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "chatanywhere")

@@ -78,6 +78,9 @@ class TeamState(TypedDict):
     approval_required: bool          # 是否需要人工审批
     approval_granted: bool           # 审批是否通过
     approval_feedback: str           # 审批拒绝时的反馈文本
+    cancel_requested: bool           # API 写入；节点在边界处协作式停止
+    current_node: str | None         # 最近完成的工作流节点
+    events: Annotated[list[dict], "append"]  # TaskEvent 的 JSON 序列化结果
     errors: Annotated[list[ErrorRecord], "append"]
 
     # ========== Agent 产出物层 [B 产生，C 消费] ==========
@@ -131,6 +134,9 @@ def create_initial_state(
         approval_required=False,
         approval_granted=False,
         approval_feedback="",
+        cancel_requested=False,
+        current_node=None,
+        events=[],
         errors=[],
         requirement_analysis=None,
         plan=None,

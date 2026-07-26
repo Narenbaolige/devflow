@@ -286,15 +286,17 @@ class TestNodeFunctions:
         result = asyncio.run(finalize(s))
         assert result["phase"] == "done"
 
-    def test_await_approval_auto_grants(self):
-        """两周版：await_approval 自动通过。"""
+    def test_await_approval_rejection_enters_rework(self):
+        """审批拒绝后应保留反馈并进入返工，而不是自动通过。"""
         import asyncio
 
         from app.graph import await_approval
         s = _state(phase="awaiting_approval", approval_required=True, approval_granted=False)
         result = asyncio.run(await_approval(s))
-        assert result["approval_granted"] is True
-        assert result["phase"] == "done"
+        assert result["approval_granted"] is False
+        assert result["approval_required"] is False
+        assert result["phase"] == "developing"
+        assert result["iteration"] == 1
 
 
 # =============================================================================

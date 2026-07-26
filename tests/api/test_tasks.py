@@ -76,3 +76,16 @@ class TestTaskEndpoints:
         response = client.post(f"/tasks/{task_id}/cancel")
         assert response.status_code == 200
         assert response.json()["phase"] == "cancelled"
+
+    def test_task_events(self, client):
+        """任务应暴露前端可消费的 SSE 事件流。"""
+        create_resp = client.post("/tasks", json={
+            "requirement": "测试事件流",
+            "repo_url": "https://github.com/example/demo-repo",
+        })
+        task_id = create_resp.json()["task_id"]
+
+        response = client.get(f"/tasks/{task_id}/events")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert "data:" in response.text

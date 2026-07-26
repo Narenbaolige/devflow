@@ -10,12 +10,16 @@
     GET    /tasks/{task_id}/events    — 任务事件（SSE）
 """
 
+import asyncio
+import json
 import uuid
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.graph import graph
+from app import graph as workflow
 from contracts.state import create_initial_state
 
 router = APIRouter()
@@ -25,6 +29,17 @@ router = APIRouter()
 # =============================================================================
 
 _tasks_store: dict[str, dict] = {}
+
+
+async def _checkpoint_state(task_id: str) -> dict | None:
+    """优先从 LangGraph checkpoint 读取，内存缓存只用于兼容当前开发模式。"""
+    config = {"configurable": {"thread_id": task_id}}
+    snapshot = await workflow.graph.aget_state(config)
+    if snapshot and snapshot.values:
+        state = dict(snapshot.values)
+        _tasks_store[task_id] = state
+        return state
+    return _tasks_store.get(task_id)
 
 
 # =============================================================================
@@ -50,6 +65,8 @@ class TaskResponse(BaseModel):
     created_at: str
     approval_required: bool = False
     approval_granted: bool = False
+    cancel_requested: bool = False
+    current_node: str | None = None
 
 
 class ApproveRequest(BaseModel):
@@ -61,6 +78,24 @@ class TaskListResponse(BaseModel):
     """任务列表"""
     tasks: list[TaskResponse]
     total: int
+
+
+def _to_response(state: dict) -> TaskResponse:
+    """将 checkpoint 状态统一投影为 API 响应。"""
+    meta = state["task_meta"]
+    return TaskResponse(
+        task_id=meta["task_id"],
+        phase=state.get("phase", "unknown"),
+        requirement=meta["requirement"],
+        repo_url=meta["repo_url"],
+        iteration=state.get("iteration", 0),
+        errors=state.get("errors", []),
+        created_at=meta["created_at"],
+        approval_required=state.get("approval_required", False),
+        approval_granted=state.get("approval_granted", False),
+        cancel_requested=state.get("cancel_requested", False),
+        current_node=state.get("current_node"),
+    )
 
 
 # =============================================================================
@@ -87,42 +122,22 @@ async def create_task(req: CreateTaskRequest):
 
     # 运行 LangGraph
     config = {"configurable": {"thread_id": task_id}}
-    result = await graph.ainvoke(initial_state, config)
+    result = await workflow.graph.ainvoke(initial_state, config)
 
     # 缓存最新状态
     _tasks_store[task_id] = result
 
-    return TaskResponse(
-        task_id=task_id,
-        phase=result.get("phase", "init"),
-        requirement=req.requirement,
-        repo_url=req.repo_url,
-        iteration=result.get("iteration", 0),
-        errors=result.get("errors", []),
-        created_at=result["task_meta"]["created_at"],
-        approval_required=result.get("approval_required", False),
-        approval_granted=result.get("approval_granted", False),
-    )
+    return _to_response(result)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str):
     """查询任务状态。"""
-    state = _tasks_store.get(task_id)
+    state = await _checkpoint_state(task_id)
     if state is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
-    return TaskResponse(
-        task_id=task_id,
-        phase=state.get("phase", "unknown"),
-        requirement=state["task_meta"]["requirement"],
-        repo_url=state["task_meta"]["repo_url"],
-        iteration=state.get("iteration", 0),
-        errors=state.get("errors", []),
-        created_at=state["task_meta"]["created_at"],
-        approval_required=state.get("approval_required", False),
-        approval_granted=state.get("approval_granted", False),
-    )
+    return _to_response(state)
 
 
 @router.get("", response_model=TaskListResponse)
@@ -135,15 +150,7 @@ async def list_tasks(
     page = all_tasks[offset:offset + limit]
 
     tasks = [
-        TaskResponse(
-            task_id=s["task_meta"]["task_id"],
-            phase=s.get("phase", "unknown"),
-            requirement=s["task_meta"]["requirement"],
-            repo_url=s["task_meta"]["repo_url"],
-            iteration=s.get("iteration", 0),
-            errors=s.get("errors", []),
-            created_at=s["task_meta"]["created_at"],
-        )
+        _to_response(s)
         for s in page
     ]
 
@@ -158,31 +165,20 @@ async def approve_task(task_id: str, req: ApproveRequest = ApproveRequest()):
     仅当任务处于 awaiting_approval 状态时有效。
     两周版：审批后自动继续执行。
     """
-    state = _tasks_store.get(task_id)
+    state = await _checkpoint_state(task_id)
     if state is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
     if state.get("phase") != "awaiting_approval":
         raise HTTPException(status_code=409, detail="任务不在等待审批状态")
 
-    state["approval_granted"] = True
-    state["approval_feedback"] = req.feedback
-
-    # 继续执行（从审批节点到 finalize）
     config = {"configurable": {"thread_id": task_id}}
-    result = await graph.ainvoke(state, config)
-    _tasks_store[task_id] = result
-
-    return TaskResponse(
-        task_id=task_id,
-        phase=result.get("phase", "done"),
-        requirement=state["task_meta"]["requirement"],
-        repo_url=state["task_meta"]["repo_url"],
-        iteration=state.get("iteration", 0),
-        errors=state.get("errors", []),
-        created_at=state["task_meta"]["created_at"],
-        approval_required=False,
-        approval_granted=True,
+    await workflow.graph.aupdate_state(
+        config, {"approval_granted": True, "approval_feedback": req.feedback}
     )
+    # None 表示从 checkpoint 的中断点继续，而不是从 init_task 重新开始。
+    result = await workflow.graph.ainvoke(None, config)
+    _tasks_store[task_id] = result
+    return _to_response(result)
 
 
 @router.post("/{task_id}/reject", response_model=TaskResponse)
@@ -192,50 +188,51 @@ async def reject_task(task_id: str, req: ApproveRequest = ApproveRequest()):
 
     任务将返回 develop_changes 节点，Developer Agent 根据反馈重新修改。
     """
-    state = _tasks_store.get(task_id)
+    state = await _checkpoint_state(task_id)
     if state is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
     if state.get("phase") != "awaiting_approval":
         raise HTTPException(status_code=409, detail="任务不在等待审批状态")
 
-    state["approval_granted"] = False
-    state["approval_feedback"] = req.feedback
-    state["phase"] = "developing"
-    state["iteration"] = state.get("iteration", 0) + 1
-
     config = {"configurable": {"thread_id": task_id}}
-    result = await graph.ainvoke(state, config)
-    _tasks_store[task_id] = result
-
-    return TaskResponse(
-        task_id=task_id,
-        phase=result.get("phase", "developing"),
-        requirement=state["task_meta"]["requirement"],
-        repo_url=state["task_meta"]["repo_url"],
-        iteration=state.get("iteration", 0),
-        errors=state.get("errors", []),
-        created_at=state["task_meta"]["created_at"],
-        approval_required=False,
-        approval_granted=False,
+    await workflow.graph.aupdate_state(
+        config, {"approval_granted": False, "approval_feedback": req.feedback}
     )
+    result = await workflow.graph.ainvoke(None, config)
+    _tasks_store[task_id] = result
+    return _to_response(result)
 
 
 @router.post("/{task_id}/cancel", response_model=TaskResponse)
 async def cancel_task(task_id: str):
     """取消任务。"""
-    state = _tasks_store.get(task_id)
+    state = await _checkpoint_state(task_id)
     if state is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
+    config = {"configurable": {"thread_id": task_id}}
+    state["cancel_requested"] = True
     state["phase"] = "cancelled"
+    state.setdefault("events", []).append({
+        "event_id": str(uuid.uuid4()), "task_id": task_id, "event_type": "progress",
+        "node_name": state.get("current_node"), "timestamp": __import__("datetime").datetime.now().isoformat(),
+        "message": "已请求取消任务", "data": {"phase": "cancelled"},
+    })
+    await workflow.graph.aupdate_state(config, state)
     _tasks_store[task_id] = state
+    return _to_response(state)
 
-    return TaskResponse(
-        task_id=task_id,
-        phase="cancelled",
-        requirement=state["task_meta"]["requirement"],
-        repo_url=state["task_meta"]["repo_url"],
-        iteration=state.get("iteration", 0),
-        errors=state.get("errors", []),
-        created_at=state["task_meta"]["created_at"],
-    )
+
+@router.get("/{task_id}/events")
+async def task_events(task_id: str):
+    """返回当前已记录事件的 SSE 流；前端可断线后重新拉取。"""
+    state = await _checkpoint_state(task_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+
+    async def stream() -> AsyncIterator[str]:
+        for event in state.get("events", []):
+            yield f"event: {event.get('event_type', 'progress')}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+            await asyncio.sleep(0)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")

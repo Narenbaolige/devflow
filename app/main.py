@@ -14,17 +14,20 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv(override=True)
 
 from app.api.tasks import router as tasks_router  # noqa: E402
+from app import graph as workflow  # noqa: E402
+from app.checkpoint import managed_checkpointer  # noqa: E402
 from app.config import settings  # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理。"""
-    # 启动时
-    print(f"[DevFlow] 启动完成 — {settings.HOST}:{settings.PORT}")
-    yield
-    # 关闭时
-    print("[DevFlow] 正在关闭...")
+    async with managed_checkpointer() as checkpointer:
+        # 在服务启动时编译图，确保 API 与应用生命周期共用同一持久化后端。
+        workflow.graph = workflow.build_graph(checkpointer=checkpointer)
+        print(f"[DevFlow] 启动完成 — {settings.HOST}:{settings.PORT}")
+        yield
+        print("[DevFlow] 正在关闭...")
 
 
 app = FastAPI(
