@@ -14,6 +14,13 @@ from langgraph.graph import END, StateGraph
 from contracts.state import TeamState
 
 
+# =============================================================================
+# 切换开关：设为 False 启用真实沙箱（与 Agent.USE_MOCK 同步切换）
+# Day 2 — Mock 全流程；Day 3 — 切为 False 接入真实沙箱
+# =============================================================================
+_USE_MOCK_SANDBOX = True
+
+
 def _record_event(state: TeamState, event_type: str, message: str, node_name: str) -> None:
     """在状态中记录可被 API/SSE 消费的轻量事件。"""
     state.setdefault("events", []).append({
@@ -88,47 +95,183 @@ async def develop_changes(state: TeamState) -> TeamState:
 
 
 async def apply_patches(state: TeamState) -> TeamState:
-    """应用 Patch 节点 → 沙箱操作 [C]"""
+    """应用 Patch 节点 → 沙箱操作 [C]
+
+    使用沙箱 clone 目标仓库并应用 Developer Agent 生成的 patch。
+    同一任务的沙箱实例会被后续 run_tests 节点复用。
+    """
     if _cancelled(state, "apply_patches"):
         return state
-    # TODO Day 3: 由 C 的沙箱模块提供 clone + apply patches 实现。
-    state["phase"] = "testing"
-    _record_event(state, "node_complete", "Patch 应用步骤完成", "apply_patches")
+
+    if _USE_MOCK_SANDBOX:
+        state["phase"] = "testing"
+        _record_event(state, "node_complete", "Patch 应用步骤完成 (Mock)", "apply_patches")
+        return state
+
+    from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox
+
+    task_id = state["task_meta"]["task_id"]
+    meta = state["task_meta"]
+    patches = state.get("patches") or []
+
+    try:
+        sandbox = get_sandbox(task_id)
+
+        # Step 1: clone 仓库
+        r = sandbox.execute(
+            f"git clone --depth 1 --branch {meta['branch']} {meta['repo_url']} repo",
+            timeout=120,
+        )
+        if r.exit_code != 0:
+            _record_event(state, "error", f"git clone 失败: {r.stderr or r.stdout[:200]}", "apply_patches")
+            cleanup_sandbox(task_id)
+            state["phase"] = "failed"
+            return state
+
+        # Step 2: 应用 patches
+        if patches:
+            for i, patch in enumerate(patches):
+                result = patch if isinstance(patch, dict) else {}
+                diff = result.get("diff", "")
+                if not diff:
+                    continue
+                import tempfile
+                from pathlib import Path
+                patch_file = Path(tempfile.gettempdir()) / f"devflow-patch-{task_id}-{i}.diff"
+                patch_file.write_text(diff, encoding="utf-8")
+                r = sandbox.execute(f"git apply {patch_file}", cwd="repo")
+                patch_file.unlink(missing_ok=True)
+                if r.exit_code != 0:
+                    _record_event(state, "error", f"Patch {i} 应用失败: {r.stderr or r.stdout[:200]}", "apply_patches")
+                    # 不中断流程 — 部分失败仍继续测试
+
+        state["phase"] = "testing"
+        _record_event(state, "node_complete", "仓库 clone 完成，patch 已应用", "apply_patches")
+    except Exception as e:
+        _record_event(state, "error", f"apply_patches 异常: {e}", "apply_patches")
+        cleanup_sandbox(task_id)
+        state["phase"] = "failed"
+
     return state
 
 
 async def run_tests(state: TeamState) -> TeamState:
-    """测试执行节点 → 沙箱操作 [C]"""
-    # TODO Day 3: 切换为 Agent 驱动的沙箱调用。
-    #
-    # 沙箱只提供 execute(command)，Agent 决定测试策略：
-    #   sandbox = create_sandbox()
-    #   sandbox.execute("git clone --depth 1 --branch main URL repo")
-    #   sandbox.execute("pip install -e .", cwd="repo", timeout=180)
-    #   r = sandbox.execute("python -m pytest -v", cwd="repo")
-    #   # Agent 自行解读 r.stdout，决定下一步
-    #   # 遇到 C++ 项目就调 MSBuild，遇到 Rust 就调 cargo test
+    """测试执行节点 → 沙箱操作 [C]
 
+    沙箱只提供 execute(command)，Agent 自行决定跑什么命令。
+    当前 Agent 处于 Mock 模式时，由本节点代为执行 pytest（默认策略）。
+    Agent 切换到真实模式后，由 Developer Agent 通过 sandbox_execute 工具自行控制。
+    """
     if _cancelled(state, "run_tests"):
         return state
-    from contracts.sandbox_result import SandboxResult, TestSummary
 
-    state["sandbox_results"].append(
-        SandboxResult(
-            execution_id=str(uuid.uuid4()),
-            task_id=state["task_meta"]["task_id"],
+    if _USE_MOCK_SANDBOX:
+        from contracts.sandbox_result import SandboxResult, TestSummary
+        state["sandbox_results"].append(
+            SandboxResult(
+                execution_id=str(uuid.uuid4()),
+                task_id=state["task_meta"]["task_id"],
+                sandbox_type="test",
+                status="success",
+                exit_code=0,
+                timed_out=False,
+                duration_ms=1500,
+                test_summary=TestSummary(total=10, passed=10, failed=0),
+                started_at=datetime.now().isoformat(),
+                finished_at=datetime.now().isoformat(),
+            ).model_dump()
+        )
+        state["phase"] = "reviewing"
+        _record_event(state, "test_result", "测试执行完成 (Mock)", "run_tests")
+        return state
+
+    from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox
+    from contracts.sandbox_result import SandboxResult, TestSummary, TestFailure
+
+    task_id = state["task_meta"]["task_id"]
+    execution_id = str(uuid.uuid4())[:8]
+    started_at = datetime.now()
+
+    try:
+        sandbox = get_sandbox(task_id)
+
+        # 安装依赖（pip install -e . 优先，失败则 -r requirements.txt）
+        sandbox.execute(
+            "(pip install -q -e . 2>&1 || "
+            "[ -f requirements.txt ] && pip install -q -r requirements.txt || true)",
+            cwd="repo",
+            timeout=180,
+        )
+
+        # 运行 pytest
+        import time
+        start = time.time()
+        r = sandbox.execute("python -m pytest --tb=short -v 2>&1", cwd="repo", timeout=300)
+        duration_ms = int((time.time() - start) * 1000)
+
+        # 解析输出
+        import re
+        def _find(pattern, text):
+            m = re.search(pattern, text)
+            return int(m.group(1)) if m else 0
+        passed = _find(r'(\d+)\s+passed', r.stdout)
+        failed = _find(r'(\d+)\s+failed', r.stdout)
+        errors = _find(r'(\d+)\s+errors?', r.stdout)
+        skipped = _find(r'(\d+)\s+skipped', r.stdout)
+
+        failures_list = []
+        for match in re.finditer(r'FAILED\s+(.+)', r.stdout):
+            full = match.group(1).strip()
+            parts = full.split("::")
+            failures_list.append(TestFailure(
+                test_name=parts[-1] if parts else full,
+                test_file=parts[0] if parts else "unknown",
+                failure_type="assertion",
+                message="测试失败",
+                traceback="详见 stdout",
+                is_new_failure=True,
+            ).model_dump())
+
+        result = SandboxResult(
+            execution_id=execution_id,
+            task_id=task_id,
             sandbox_type="test",
-            status="success",
-            exit_code=0,
-            timed_out=False,
-            duration_ms=1500,
-            test_summary=TestSummary(total=10, passed=10, failed=0),
-            started_at=datetime.now().isoformat(),
+            status="success" if r.exit_code == 0 else "failure",
+            exit_code=r.exit_code,
+            timed_out=r.timed_out,
+            duration_ms=duration_ms,
+            stdout=r.stdout[-50000:],
+            stderr=r.stderr[-10000:],
+            test_summary=TestSummary(
+                total=passed + failed + errors + skipped,
+                passed=passed, failed=failed, errors=errors, skipped=skipped,
+            ),
+            test_failures=failures_list,
+            started_at=started_at.isoformat(),
             finished_at=datetime.now().isoformat(),
-        ).model_dump()
-    )
-    state["phase"] = "reviewing"
-    _record_event(state, "test_result", "测试执行完成", "run_tests")
+        )
+        state["sandbox_results"].append(result.model_dump())
+
+        state["phase"] = "reviewing"
+        _record_event(state, "test_result",
+                      f"测试完成: {passed} passed, {failed} failed, {errors} errors",
+                      "run_tests")
+    except Exception as e:
+        state["sandbox_results"].append(
+            SandboxResult(
+                execution_id=execution_id, task_id=task_id,
+                sandbox_type="test", status="error",
+                exit_code=-1, timed_out=False, duration_ms=0,
+                stdout=f"测试执行异常: {e}",
+                started_at=started_at.isoformat(),
+                finished_at=datetime.now().isoformat(),
+            ).model_dump()
+        )
+        state["phase"] = "reviewing"
+        _record_event(state, "error", f"run_tests 异常: {e}", "run_tests")
+    finally:
+        cleanup_sandbox(task_id)
+
     return state
 
 

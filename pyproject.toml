@@ -45,3 +45,6 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: 慢速测试（需网络），默认跳过。使用 -m slow 显式运行",
+]
