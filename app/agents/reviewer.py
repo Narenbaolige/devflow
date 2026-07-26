@@ -36,8 +36,8 @@ class ReviewerAgent(AgentBase):
         req_result = req.get("result", {}) if req else {}
 
         patch_summary = "\n".join(
-            f"  - {p.get('result', {}).get('file_path', 'unknown')}: "
-            f"{p.get('result', {}).get('change_description', '无描述')}"
+            f"  - {p.get('file_path', 'unknown')}: "
+            f"{p.get('change_description', '无描述')}"
             for p in patches
         )
 

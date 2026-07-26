@@ -1,8 +1,8 @@
 """RequirementAgent 单元测试。"""
 
+from app.agents.requirement import RequirementAgent
 from contracts.agent_result import AgentRole, RequirementResult
 from contracts.state import create_initial_state
-from app.agents.requirement import RequirementAgent
 
 
 class TestRequirementAgent:

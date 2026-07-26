@@ -1,7 +1,7 @@
 """SingleAgent 单元测试 — 单 Agent 基线。"""
 
-from contracts.state import create_initial_state
 from app.agents.single_agent import SingleAgent, SingleAgentResult, SinglePatchItem
+from contracts.state import create_initial_state
 
 
 class TestSingleAgentResult:
@@ -45,8 +45,8 @@ class TestSingleAgentResult:
 
     def test_confidence_bounds(self):
         """置信度必须在 0.0-1.0 范围内。"""
-        from pydantic import ValidationError
         import pytest
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             SingleAgentResult(summary="x", approach="x", requirement_confidence=1.5)

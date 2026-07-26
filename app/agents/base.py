@@ -229,6 +229,13 @@ class AgentBase(ABC):
                 input_tokens = 0
                 output_tokens = 0
 
+            # 校验结构化输出（处理 LangChain 解析器未能捕获的边缘情况）
+            if isinstance(result, str):
+                from app.agents.validator import validate_against_model
+                result = validate_against_model(result, self.output_schema)
+            elif isinstance(result, dict):
+                result = self.output_schema.model_validate(result)
+
             return AgentResult(
                 agent_role=self.role,
                 success=True,
@@ -305,10 +312,12 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
     field = field_map.get(agent.role)
     if field:
         if field == "patches":
-            # Developer Agent 返回多个 Patch，用 append reducer
+            # Developer Agent 返回 PatchResult，存入 patches 列表。
+            # 注意：patches 使用 merge_by_file reducer（按 file_path 去重），
+            # 因此直接存 PatchResult 字典而非 AgentResult 包装——否则 reducer
+            # 找不到 file_path 字段，所有 patch 会被错误合并为一个。
             if result.success and result.result:
-                # AgentResult.result 是 dict，但 patches 期望 list[dict]
-                state[field] = [result.model_dump()]
+                state[field] = [result.result]
         else:
             state[field] = result.model_dump()
 

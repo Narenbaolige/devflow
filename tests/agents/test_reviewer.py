@@ -1,8 +1,8 @@
 """ReviewerAgent 单元测试。"""
 
+from app.agents.reviewer import ReviewerAgent
 from contracts.agent_result import AgentRole, ReviewResult
 from contracts.state import create_initial_state
-from app.agents.reviewer import ReviewerAgent
 
 
 class TestReviewerAgent:

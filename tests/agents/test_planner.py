@@ -1,8 +1,8 @@
 """PlannerAgent 单元测试。"""
 
+from app.agents.planner import PlannerAgent
 from contracts.agent_result import AgentRole, PlanResult
 from contracts.state import create_initial_state
-from app.agents.planner import PlannerAgent
 
 
 class TestPlannerAgent:

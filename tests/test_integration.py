@@ -5,8 +5,8 @@ DevFlow 集成测试。
 """
 
 import pytest
-from contracts.state import create_initial_state
 
+from contracts.state import create_initial_state
 
 # =============================================================================
 # 桩：构造各种中间状态的辅助函数
@@ -253,39 +253,44 @@ class TestNodeFunctions:
     """直接测试每个 LangGraph 节点的行为。"""
 
     def test_init_task_sets_phase(self):
-        from app.graph import init_task
         import asyncio
+
+        from app.graph import init_task
         s = _state(phase="init")
         result = asyncio.run(init_task(s))
         assert result["phase"] == "analyzing"
 
     def test_handle_error_under_max_retries(self):
         """iteration < max → 返工到 developing。"""
-        from app.graph import handle_error
         import asyncio
+
+        from app.graph import handle_error
         s = _state(phase="testing", iteration=1, max_iterations=3)
         result = asyncio.run(handle_error(s))
         assert result["phase"] == "developing"
 
     def test_handle_error_at_max_retries(self):
         """iteration >= max → 标记为 failed。"""
-        from app.graph import handle_error
         import asyncio
+
+        from app.graph import handle_error
         s = _state(phase="testing", iteration=3, max_iterations=3)
         result = asyncio.run(handle_error(s))
         assert result["phase"] == "failed"
 
     def test_finalize_sets_done(self):
-        from app.graph import finalize
         import asyncio
+
+        from app.graph import finalize
         s = _state(phase="reviewing")
         result = asyncio.run(finalize(s))
         assert result["phase"] == "done"
 
     def test_await_approval_auto_grants(self):
         """两周版：await_approval 自动通过。"""
-        from app.graph import await_approval
         import asyncio
+
+        from app.graph import await_approval
         s = _state(phase="awaiting_approval", approval_required=True, approval_granted=False)
         result = asyncio.run(await_approval(s))
         assert result["approval_granted"] is True

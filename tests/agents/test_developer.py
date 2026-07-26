@@ -1,8 +1,8 @@
 """DeveloperAgent 单元测试。"""
 
+from app.agents.developer import DeveloperAgent
 from contracts.agent_result import AgentRole, PatchResult
 from contracts.state import create_initial_state
-from app.agents.developer import DeveloperAgent
 
 
 class TestDeveloperAgent:
