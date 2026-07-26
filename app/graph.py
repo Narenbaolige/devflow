@@ -195,13 +195,16 @@ async def run_tests(state: TeamState) -> TeamState:
     try:
         sandbox = get_sandbox(task_id)
 
-        # 安装依赖（pip install -e . 优先，失败则 -r requirements.txt）
-        sandbox.execute(
-            "(pip install -q -e . 2>&1 || "
-            "[ -f requirements.txt ] && pip install -q -r requirements.txt || true)",
-            cwd="repo",
-            timeout=180,
-        )
+        # 安装依赖：先尝试 pip install -e .，失败则检查 requirements.txt
+        r = sandbox.execute("pip install -q -e .", cwd="repo", timeout=180)
+        if r.exit_code != 0:
+            # 检查 requirements.txt 是否存在
+            check = sandbox.execute(
+                "python -c \"import os; exit(0 if os.path.exists('requirements.txt') else 1)\"",
+                cwd="repo",
+            )
+            if check.exit_code == 0:
+                sandbox.execute("pip install -q -r requirements.txt", cwd="repo", timeout=180)
 
         # 运行 pytest
         import time

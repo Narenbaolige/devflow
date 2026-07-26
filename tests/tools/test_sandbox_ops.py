@@ -78,15 +78,15 @@ class TestFilePersistenceAcrossCalls:
         r1 = sandbox_execute("echo shared-data > shared.txt", task_id="persist-test")
         assert r1.success, f"写文件失败: {r1.error}"
 
-        r2 = sandbox_execute("cat shared.txt", task_id="persist-test")
+        r2 = sandbox_execute("type shared.txt", task_id="persist-test")
         assert r2.success
         assert "shared-data" in (r2.data or "")
 
     def test_different_tasks_isolated(self):
         """不同 task 的文件系统应隔离。"""
         sandbox_execute("echo task-a-data > a.txt", task_id="task-a")
-        r = sandbox_execute("cat a.txt 2>&1", task_id="task-b")
-        # task-b 不应看到 task-a 的文件（cat 返回非零）
+        r = sandbox_execute("type a.txt 2>&1", task_id="task-b")
+        # task-b 不应看到 task-a 的文件（type 返回非零）
         assert not r.success or "task-a-data" not in (r.data or "")
 
 
@@ -111,15 +111,15 @@ class TestSandboxExecute:
 
     def test_timeout(self):
         """超时命令返回 success=False。"""
-        r = sandbox_execute("sleep 10", timeout=1, task_id="tool-test")
+        r = sandbox_execute("python -c \"import time; time.sleep(10)\"", timeout=1, task_id="tool-test")
         assert not r.success
         assert "超时" in (r.data or "")
 
     def test_cwd_parameter(self):
         """cwd 参数应生效。"""
-        sandbox_execute("mkdir -p sub", task_id="tool-test")
+        sandbox_execute("mkdir sub", task_id="tool-test")
         sandbox_execute("echo nested > f.txt", cwd="sub", task_id="tool-test")
-        r = sandbox_execute("cat f.txt", cwd="sub", task_id="tool-test")
+        r = sandbox_execute("type f.txt", cwd="sub", task_id="tool-test")
         assert r.success
         assert "nested" in (r.data or "")
 

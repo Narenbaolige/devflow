@@ -46,6 +46,11 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+norecursedirs = ["contracts"]
 markers = [
     "slow: 慢速测试（需网络），默认跳过。使用 -m slow 显式运行",
+]
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+    "ignore::DeprecationWarning:starlette.testclient",
 ]
