@@ -53,6 +53,12 @@ CHECKPOINTER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devflow
 - 安全审查根据 Reviewer 的 `risk_level` 和问题严重度生成审批决策，不再固定通过。
 - 出现 `critical` 或 `high` 风险时工作流暂停在 `awaiting_approval`；拒绝后携带反馈返工。
 
+### 6. 运行控制
+
+- 创建任务后改为后台执行，任务详情、事件查询和取消接口不再等待完整工作流结束。
+- 增加任务总超时、LLM 成本预算字段；在每个 Agent/沙箱节点边界强制停止超限任务。
+- 取消请求会取消后台图协程，并保留 `cancelled` 状态与事件。
+
 ## 修改文件
 
 | 文件 | 说明 |

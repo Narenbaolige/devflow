@@ -10,7 +10,7 @@ LangGraph StateGraph 的核心数据结构。
 P0 冻结，修改需四人评审。
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Literal, TypedDict
 
 # =============================================================================
@@ -33,6 +33,7 @@ class ErrorRecord(TypedDict):
         "llm_error",
         "sandbox_error",
         "timeout",
+        "budget_exceeded",
         "validation_error",
         "unknown",
     ]
@@ -79,6 +80,9 @@ class TeamState(TypedDict):
     approval_granted: bool           # 审批是否通过
     approval_feedback: str           # 审批拒绝时的反馈文本
     cancel_requested: bool           # API 写入；节点在边界处协作式停止
+    deadline_at: str | None          # ISO 8601；超过后任务终止
+    budget_limit_usd: float | None   # LLM 调用费用上限；None 表示不限制
+    budget_used_usd: float           # 已累计的 LLM 调用费用
     current_node: str | None         # 最近完成的工作流节点
     events: Annotated[list[dict], "append"]  # TaskEvent 的 JSON 序列化结果
     errors: Annotated[list[ErrorRecord], "append"]
@@ -118,6 +122,8 @@ def create_initial_state(
     branch: str,
     requirement: str,
     max_iterations: int = 3,
+    execution_timeout_seconds: int | None = None,
+    budget_limit_usd: float | None = None,
 ) -> TeamState:
     """创建初始 TeamState。"""
     return TeamState(
@@ -135,6 +141,12 @@ def create_initial_state(
         approval_granted=False,
         approval_feedback="",
         cancel_requested=False,
+        deadline_at=(
+            (datetime.now() + timedelta(seconds=execution_timeout_seconds)).isoformat()
+            if execution_timeout_seconds else None
+        ),
+        budget_limit_usd=budget_limit_usd,
+        budget_used_usd=0.0,
         current_node=None,
         events=[],
         errors=[],

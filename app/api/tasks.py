@@ -13,6 +13,7 @@
 import asyncio
 import json
 import uuid
+from datetime import datetime
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Query
@@ -20,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import graph as workflow
+from app.config import settings
 from contracts.state import create_initial_state
 
 router = APIRouter()
@@ -30,6 +32,7 @@ router = APIRouter()
 # =============================================================================
 
 _tasks_store: dict[str, dict] = {}
+_running_tasks: dict[str, asyncio.Task] = {}
 
 
 async def _checkpoint_state(task_id: str) -> dict | None:
@@ -86,6 +89,12 @@ class CreateTaskRequest(BaseModel):
     repo_url: str = Field(description="代码仓库 URL")
     branch: str = Field(default="main", description="目标分支")
     max_iterations: int = Field(default=3, ge=1, le=10, description="最大迭代次数")
+    timeout_seconds: int = Field(
+        default=settings.TASK_TIMEOUT_SECONDS, ge=1, le=3600, description="任务总超时秒数"
+    )
+    budget_limit_usd: float | None = Field(
+        default=None, ge=0, description="LLM 成本上限（美元）；不传则使用全局配置"
+    )
 
 
 class TaskResponse(BaseModel):
@@ -101,6 +110,9 @@ class TaskResponse(BaseModel):
     approval_granted: bool = False
     cancel_requested: bool = False
     current_node: str | None = None
+    deadline_at: str | None = None
+    budget_limit_usd: float | None = None
+    budget_used_usd: float = 0.0
 
 
 class ApproveRequest(BaseModel):
@@ -129,7 +141,41 @@ def _to_response(state: dict) -> TaskResponse:
         approval_granted=state.get("approval_granted", False),
         cancel_requested=state.get("cancel_requested", False),
         current_node=state.get("current_node"),
+        deadline_at=state.get("deadline_at"),
+        budget_limit_usd=state.get("budget_limit_usd"),
+        budget_used_usd=state.get("budget_used_usd", 0.0),
     )
+
+
+async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> None:
+    """后台运行图，使查询和取消 API 在任务执行期间仍可响应。"""
+    config = {"configurable": {"thread_id": task_id}}
+    try:
+        result = await asyncio.wait_for(
+            workflow.graph.ainvoke(initial_state, config), timeout=timeout_seconds
+        )
+        _tasks_store[task_id] = result
+    except asyncio.TimeoutError:
+        state = await _checkpoint_state(task_id) or initial_state
+        state["phase"] = "failed"
+        state.setdefault("errors", []).append({
+            "node": state.get("current_node") or "runtime",
+            "error_type": "timeout",
+            "message": "任务总超时，后台执行已终止",
+            "timestamp": datetime.now().isoformat(),
+            "recoverable": False,
+            "retry_count": state.get("iteration", 0),
+        })
+        _tasks_store[task_id] = state
+        try:
+            await workflow.graph.aupdate_state(config, state)
+        except Exception:
+            pass
+    except asyncio.CancelledError:
+        # cancel_task 已写入 cancelled 状态；避免后台协程覆盖该状态。
+        raise
+    finally:
+        _running_tasks.pop(task_id, None)
 
 
 # =============================================================================
@@ -146,22 +192,33 @@ async def create_task(req: CreateTaskRequest):
     task_id = str(uuid.uuid4())[:8]
 
     # 构建初始状态
+    budget_limit = req.budget_limit_usd
+    if budget_limit is None and settings.TASK_BUDGET_USD > 0:
+        budget_limit = settings.TASK_BUDGET_USD
     initial_state = create_initial_state(
         task_id=task_id,
         repo_url=req.repo_url,
         branch=req.branch,
         requirement=req.requirement,
         max_iterations=req.max_iterations,
+        execution_timeout_seconds=req.timeout_seconds,
+        budget_limit_usd=budget_limit,
     )
+    initial_state["events"].append({
+        "event_id": str(uuid.uuid4()),
+        "task_id": task_id,
+        "event_type": "progress",
+        "node_name": "init_task",
+        "timestamp": datetime.now().isoformat(),
+        "message": "任务已创建，等待后台执行",
+        "data": {"phase": "init"},
+    })
 
-    # 运行 LangGraph
-    config = {"configurable": {"thread_id": task_id}}
-    result = await workflow.graph.ainvoke(initial_state, config)
-
-    # 缓存最新状态
-    _tasks_store[task_id] = result
-
-    return _to_response(result)
+    _tasks_store[task_id] = initial_state
+    _running_tasks[task_id] = asyncio.create_task(
+        _run_task(task_id, initial_state, req.timeout_seconds), name=f"devflow-{task_id}"
+    )
+    return _to_response(initial_state)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -252,7 +309,14 @@ async def cancel_task(task_id: str):
         "node_name": state.get("current_node"), "timestamp": __import__("datetime").datetime.now().isoformat(),
         "message": "已请求取消任务", "data": {"phase": "cancelled"},
     })
-    await workflow.graph.aupdate_state(config, state)
+    running_task = _running_tasks.get(task_id)
+    if running_task and not running_task.done():
+        running_task.cancel()
+    try:
+        await workflow.graph.aupdate_state(config, state)
+    except Exception:
+        # 若任务尚未来得及写入首个 checkpoint，本地状态仍可被立即查询。
+        pass
     _tasks_store[task_id] = state
     return _to_response(state)
 

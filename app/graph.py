@@ -43,6 +43,42 @@ def _cancelled(state: TeamState, node_name: str) -> bool:
         return True
     return False
 
+
+def _limits_exceeded(state: TeamState, node_name: str) -> bool:
+    """在节点边界强制执行任务总超时与 LLM 预算上限。"""
+    deadline_at = state.get("deadline_at")
+    timed_out = bool(deadline_at and datetime.now() >= datetime.fromisoformat(deadline_at))
+    budget_limit = state.get("budget_limit_usd")
+    budget_exceeded = budget_limit is not None and state.get("budget_used_usd", 0.0) >= budget_limit
+    if not (timed_out or budget_exceeded):
+        return False
+
+    error_type = "timeout" if timed_out else "budget_exceeded"
+    message = "任务总超时，已停止执行" if timed_out else "任务预算已耗尽，已停止执行"
+    state["phase"] = "failed"
+    state.setdefault("errors", []).append({
+        "node": node_name,
+        "error_type": error_type,
+        "message": message,
+        "timestamp": datetime.now().isoformat(),
+        "recoverable": False,
+        "retry_count": state.get("iteration", 0),
+    })
+    _record_event(state, "error", message, node_name)
+    return True
+
+
+def _blocked(state: TeamState, node_name: str) -> bool:
+    return _cancelled(state, node_name) or _limits_exceeded(state, node_name)
+
+
+def _record_agent_cost(state: TeamState, artifact: dict | None) -> None:
+    """累计 AgentResult invocation 中的真实模型费用。"""
+    invocation = (artifact or {}).get("invocation") or {}
+    state["budget_used_usd"] = round(
+        state.get("budget_used_usd", 0.0) + float(invocation.get("cost_usd", 0.0) or 0.0), 6
+    )
+
 # =============================================================================
 # 节点实现（Day 1-2: 先用 Mock，Day 3-5: 替换为真实调用）
 # =============================================================================
@@ -57,12 +93,13 @@ async def init_task(state: TeamState) -> TeamState:
 
 async def analyze_requirement(state: TeamState) -> TeamState:
     """需求分析节点 → 调用 Requirement Agent [B]"""
-    if _cancelled(state, "analyze_requirement"):
+    if _blocked(state, "analyze_requirement"):
         return state
     from app.agents import RequirementAgent, agent_node
 
     state["phase"] = "analyzing"
     state = await agent_node(state, RequirementAgent())
+    _record_agent_cost(state, state.get("requirement_analysis"))
     state["phase"] = "planning"
     _record_event(state, "node_complete", "需求分析完成", "analyze_requirement")
     return state
@@ -70,12 +107,13 @@ async def analyze_requirement(state: TeamState) -> TeamState:
 
 async def plan_solution(state: TeamState) -> TeamState:
     """方案规划节点 → 调用 Planner Agent [B]"""
-    if _cancelled(state, "plan_solution"):
+    if _blocked(state, "plan_solution"):
         return state
     from app.agents import PlannerAgent, agent_node
 
     state["phase"] = "planning"
     state = await agent_node(state, PlannerAgent())
+    _record_agent_cost(state, state.get("plan"))
     state["phase"] = "developing"
     _record_event(state, "node_complete", "方案规划完成", "plan_solution")
     return state
@@ -83,7 +121,7 @@ async def plan_solution(state: TeamState) -> TeamState:
 
 async def develop_changes(state: TeamState) -> TeamState:
     """代码开发节点 → 调用 Developer Agent [B]"""
-    if _cancelled(state, "develop_changes"):
+    if _blocked(state, "develop_changes"):
         return state
     from app.agents import DeveloperAgent, agent_node
 
@@ -100,7 +138,7 @@ async def apply_patches(state: TeamState) -> TeamState:
     使用沙箱 clone 目标仓库并应用 Developer Agent 生成的 patch。
     同一任务的沙箱实例会被后续 run_tests 节点复用。
     """
-    if _cancelled(state, "apply_patches"):
+    if _blocked(state, "apply_patches"):
         return state
 
     if _USE_MOCK_SANDBOX:
@@ -162,7 +200,7 @@ async def run_tests(state: TeamState) -> TeamState:
     当前 Agent 处于 Mock 模式时，由本节点代为执行 pytest（默认策略）。
     Agent 切换到真实模式后，由 Developer Agent 通过 sandbox_execute 工具自行控制。
     """
-    if _cancelled(state, "run_tests"):
+    if _blocked(state, "run_tests"):
         return state
 
     if _USE_MOCK_SANDBOX:
@@ -280,12 +318,13 @@ async def run_tests(state: TeamState) -> TeamState:
 
 async def review_code(state: TeamState) -> TeamState:
     """代码审查节点 → 调用 Reviewer Agent [B]"""
-    if _cancelled(state, "review_code"):
+    if _blocked(state, "review_code"):
         return state
     from app.agents import ReviewerAgent, agent_node
 
     state["phase"] = "reviewing"
     state = await agent_node(state, ReviewerAgent())
+    _record_agent_cost(state, state.get("review"))
     state["phase"] = "security_check"
     _record_event(state, "node_complete", "代码审查完成", "review_code")
     return state
@@ -293,7 +332,7 @@ async def review_code(state: TeamState) -> TeamState:
 
 async def security_check(state: TeamState) -> TeamState:
     """将 Reviewer 的安全风险转化为可审计的审批决策。"""
-    if _cancelled(state, "security_check"):
+    if _blocked(state, "security_check"):
         return state
     from contracts.agent_result import AgentResult, AgentRole, SecurityIssue, SecurityResult
 
@@ -341,7 +380,7 @@ async def security_check(state: TeamState) -> TeamState:
 
 async def await_approval(state: TeamState) -> TeamState:
     """人工审批恢复点。图在本节点之前中断，由 approve/reject API 恢复。"""
-    if _cancelled(state, "await_approval"):
+    if _blocked(state, "await_approval"):
         return state
     if state.get("approval_granted"):
         state["approval_required"] = False
@@ -357,7 +396,7 @@ async def await_approval(state: TeamState) -> TeamState:
 
 async def handle_error(state: TeamState) -> TeamState:
     """错误处理节点 → 分类 + 重试决策 [A]"""
-    if state.get("phase") == "cancelled":
+    if state.get("phase") in {"cancelled", "failed"}:
         return state
     state["errors"].append({
         "node": "unknown",
@@ -393,6 +432,8 @@ AnalyzeRoute = Literal["plan_solution", "await_approval", "handle_error"]
 
 def route_after_analyze(state: TeamState) -> AnalyzeRoute:
     """需求分析后的路由。"""
+    if state.get("phase") == "failed":
+        return "handle_error"
     req = state.get("requirement_analysis")
     if req is None:
         return "handle_error"
@@ -404,7 +445,7 @@ def route_after_analyze(state: TeamState) -> AnalyzeRoute:
 
 def route_after_test(state: TeamState) -> Literal["review_code", "develop_changes", "handle_error"]:
     """测试后的路由：全部通过 → 审查，失败 → 返工，超迭代 → 错误。"""
-    if state.get("cancel_requested"):
+    if state.get("cancel_requested") or state.get("phase") == "failed":
         return "handle_error"
     results = state.get("sandbox_results", [])
     if not results:
@@ -425,7 +466,7 @@ ReviewRoute = Literal["security_check", "develop_changes", "handle_error"]
 
 def route_after_review(state: TeamState) -> ReviewRoute:
     """审查后的路由。"""
-    if state.get("cancel_requested"):
+    if state.get("cancel_requested") or state.get("phase") == "failed":
         return "handle_error"
     review = state.get("review", {})
     result = review.get("result", {})
@@ -443,8 +484,10 @@ def route_after_review(state: TeamState) -> ReviewRoute:
     return "develop_changes"
 
 
-def route_after_security(state: TeamState) -> Literal["done", "await_approval"]:
+def route_after_security(state: TeamState) -> Literal["done", "await_approval", "handle_error"]:
     """安全审查后的路由。"""
+    if state.get("phase") == "failed":
+        return "handle_error"
     if state.get("cancel_requested"):
         return "done"
     sec = state.get("security_review", {})
@@ -528,14 +571,18 @@ def build_graph(checkpointer=None):
         {
             "done": "finalize",
             "await_approval": "await_approval",
+            "handle_error": "handle_error",
         },
     )
 
     # 终端节点
     builder.add_conditional_edges(
         "await_approval",
-        lambda state: "finalize" if state.get("approval_granted") else "develop_changes",
-        {"finalize": "finalize", "develop_changes": "develop_changes"},
+        lambda state: (
+            "handle_error" if state.get("phase") == "failed"
+            else "finalize" if state.get("approval_granted") else "develop_changes"
+        ),
+        {"finalize": "finalize", "develop_changes": "develop_changes", "handle_error": "handle_error"},
     )
     builder.add_edge("finalize", END)
     builder.add_edge("handle_error", END)

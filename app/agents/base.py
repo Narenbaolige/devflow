@@ -4,12 +4,14 @@ Agent 基类与通用工具。
 定义所有 Agent 的统一接口和调用模式。
 """
 
+import asyncio
 import time
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
 
 from app.llm.factory import get_llm
+from app.metrics import estimate_cost
 from contracts.agent_result import AgentInvocation, AgentResult, AgentRole
 from contracts.state import TeamState
 
@@ -245,6 +247,9 @@ class AgentBase(ABC):
                     model=getattr(llm, "model_name", "unknown"),
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    cost_usd=estimate_cost(
+                        getattr(llm, "model_name", "unknown"), input_tokens, output_tokens
+                    ),
                     duration_ms=duration_ms,
                     retry_count=retry_count,
                 ),
@@ -298,7 +303,9 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
 
     Agent 的输出会自动写入 state 中的对应字段。
     """
-    result = agent.invoke(state)
+    # LLM 调用是同步 SDK 操作；放在线程中避免阻塞 API 事件循环，
+    # 使取消、状态查询等请求仍可被处理。
+    result = await asyncio.to_thread(agent.invoke, state)
 
     # 根据 Agent 角色写入不同字段
     field_map = {

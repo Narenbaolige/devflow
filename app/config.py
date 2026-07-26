@@ -46,6 +46,8 @@ class Settings:
     # Agent
     MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
     AGENT_TIMEOUT_SECONDS: int = int(os.getenv("AGENT_TIMEOUT_SECONDS", "120"))
+    TASK_TIMEOUT_SECONDS: int = int(os.getenv("TASK_TIMEOUT_SECONDS", "900"))
+    TASK_BUDGET_USD: float = float(os.getenv("TASK_BUDGET_USD", "0"))
 
     # Debug
     DEVFLOW_DEBUG_CONTEXT: bool = os.getenv("DEVFLOW_DEBUG_CONTEXT", "0") == "1"

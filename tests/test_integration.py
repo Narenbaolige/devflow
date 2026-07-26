@@ -331,6 +331,25 @@ class TestNodeFunctions:
         assert result["approval_required"] is True
         assert result["security_review"]["result"]["requires_approval"] is True
 
+    def test_expired_deadline_stops_before_agent_execution(self):
+        import asyncio
+        from datetime import datetime, timedelta
+
+        from app.graph import analyze_requirement
+        state = _state(deadline_at=(datetime.now() - timedelta(seconds=1)).isoformat())
+        result = asyncio.run(analyze_requirement(state))
+        assert result["phase"] == "failed"
+        assert result["errors"][-1]["error_type"] == "timeout"
+
+    def test_exhausted_budget_stops_before_agent_execution(self):
+        import asyncio
+
+        from app.graph import analyze_requirement
+        state = _state(budget_limit_usd=0.01, budget_used_usd=0.01)
+        result = asyncio.run(analyze_requirement(state))
+        assert result["phase"] == "failed"
+        assert result["errors"][-1]["error_type"] == "budget_exceeded"
+
 
 # =============================================================================
 # 返工闭环集成测试（通过直接注入状态到路由前节点）
