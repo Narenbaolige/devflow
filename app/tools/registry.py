@@ -73,19 +73,34 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         allowed_agents=["developer"],
     ),
 
-    # --- 测试执行 ---
+    # --- 沙箱命令执行 ---
+    "sandbox_execute": ToolDefinition(
+        name="sandbox_execute",
+        description=(
+            "在沙箱中执行 shell 命令。Agent 自行决定跑什么命令、如何解读结果。"
+            "沙箱不限制语言和工具，Python/Rust/Go/C++/JS 均可。"
+        ),
+        permission=ToolPermission.EXECUTE_SANDBOX,
+        parameters={
+            "command": {"type": "string", "description": "要执行的 shell 命令"},
+            "cwd": {"type": "string", "description": "工作目录，默认 /workspace"},
+            "timeout": {"type": "integer", "description": "超时秒数，默认 60"},
+        },
+        allowed_agents=["developer"],
+        rate_limit_per_minute=10,
+    ),
+
+    # --- 向后兼容别名 ---
     "execute_test": ToolDefinition(
         name="execute_test",
-        description="在沙箱中运行 pytest 并返回结构化测试结果",
+        description="[已废弃] 使用 sandbox_execute 替代。在沙箱中运行 pytest。",
         permission=ToolPermission.EXECUTE_SANDBOX,
         allowed_agents=["developer"],
         rate_limit_per_minute=5,
     ),
-
-    # --- 通用命令 ---
     "execute_command": ToolDefinition(
         name="execute_command",
-        description="在沙箱中执行白名单内的 shell 命令",
+        description="[已废弃] 使用 sandbox_execute 替代。在沙箱中执行 shell 命令。",
         permission=ToolPermission.EXECUTE_SANDBOX,
         allowed_agents=["developer"],
     ),

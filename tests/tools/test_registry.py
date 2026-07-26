@@ -12,7 +12,7 @@ class TestToolRegistry:
             "read_file", "list_dir", "glob",
             "grep",
             "write_file", "edit_file",
-            "execute_test", "execute_command",
+            "sandbox_execute", "execute_test", "execute_command",
         }
         actual = set(TOOL_REGISTRY.keys())
         assert expected == actual, f"缺少: {expected - actual}, 多余: {actual - expected}"

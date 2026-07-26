@@ -26,66 +26,30 @@ async def init_task(state: TeamState) -> TeamState:
 
 async def analyze_requirement(state: TeamState) -> TeamState:
     """需求分析节点 → 调用 Requirement Agent [B]"""
-    # TODO Day 3: 替换为真实的 Requirement Agent 调用
-    from contracts.agent_result import AgentResult, AgentRole
+    from app.agents import RequirementAgent, agent_node
 
     state["phase"] = "analyzing"
-    # Mock 输出
-    state["requirement_analysis"] = AgentResult(
-        agent_role=AgentRole.REQUIREMENT,
-        success=True,
-        result={
-            "summary": f"需求分析: {state['task_meta']['requirement'][:50]}...",
-            "affected_modules": ["待分析"],
-            "acceptance_criteria": ["验收条件待 Agent 生成"],
-            "ambiguity_flags": [],
-            "confidence": 0.85,
-        },
-        reasoning="Mock: 需求分析完成",
-    ).model_dump()
+    state = await agent_node(state, RequirementAgent())
     state["phase"] = "planning"
     return state
 
 
 async def plan_solution(state: TeamState) -> TeamState:
     """方案规划节点 → 调用 Planner Agent [B]"""
-    from contracts.agent_result import AgentResult, AgentRole
+    from app.agents import PlannerAgent, agent_node
 
     state["phase"] = "planning"
-    state["plan"] = AgentResult(
-        agent_role=AgentRole.PLANNER,
-        success=True,
-        result={
-            "approach": "Mock: 方案规划",
-            "steps": [],
-            "risk_points": [],
-            "estimated_changed_files": 1,
-            "confidence": 0.8,
-        },
-        reasoning="Mock: 方案规划完成",
-    ).model_dump()
+    state = await agent_node(state, PlannerAgent())
     state["phase"] = "developing"
     return state
 
 
 async def develop_changes(state: TeamState) -> TeamState:
     """代码开发节点 → 调用 Developer Agent [B]"""
-    from contracts.agent_result import AgentResult, AgentRole
+    from app.agents import DeveloperAgent, agent_node
 
     state["phase"] = "developing"
-    state["patches"] = [AgentResult(
-        agent_role=AgentRole.DEVELOPER,
-        success=True,
-        result={
-            "file_path": "mock/file.py",
-            "original_snippet": "# mock original",
-            "patched_snippet": "# mock patched",
-            "diff": "@@ -0,0 +1 @@\n+# mock change",
-            "change_description": "Mock: 代码修改",
-            "change_type": "modify",
-        },
-        reasoning="Mock: 代码开发完成",
-    ).model_dump()]
+    state = await agent_node(state, DeveloperAgent())
     state["phase"] = "testing"
     return state
 
@@ -131,21 +95,10 @@ async def run_tests(state: TeamState) -> TeamState:
 
 async def review_code(state: TeamState) -> TeamState:
     """代码审查节点 → 调用 Reviewer Agent [B]"""
-    from contracts.agent_result import AgentResult, AgentRole
+    from app.agents import ReviewerAgent, agent_node
 
     state["phase"] = "reviewing"
-    state["review"] = AgentResult(
-        agent_role=AgentRole.REVIEWER,
-        success=True,
-        result={
-            "passed": True,
-            "risk_level": "low",
-            "issues": [],
-            "summary": "Mock: 代码审查通过",
-            "actionable_feedback": "",
-        },
-        reasoning="Mock: 代码审查完成",
-    ).model_dump()
+    state = await agent_node(state, ReviewerAgent())
     state["phase"] = "security_check"
     return state
 
