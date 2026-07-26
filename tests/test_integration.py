@@ -73,6 +73,26 @@ def _review_result(passed=True):
     }
 
 
+def _high_risk_review_result():
+    return {
+        "agent_role": "reviewer",
+        "success": True,
+        "result": {
+            "passed": False,
+            "risk_level": "high",
+            "issues": [{
+                "severity": "critical",
+                "file_path": "app/db.py",
+                "description": "发现拼接 SQL，存在注入风险",
+                "suggestion": "改为参数化查询",
+            }],
+            "summary": "发现安全风险",
+            "actionable_feedback": "改为参数化查询",
+        },
+        "reasoning": "security test",
+    }
+
+
 def _security_result(requires_approval=False):
     return {
         "agent_role": "security",
@@ -230,6 +250,10 @@ class TestRoutingAfterReview:
         )
         assert route_after_review(s) == "handle_error"
 
+    def test_high_risk_goes_to_security_before_rework(self):
+        from app.graph import route_after_review
+        assert route_after_review(_state(review=_high_risk_review_result())) == "security_check"
+
 
 class TestRoutingAfterSecurity:
     """route_after_security — 安全审查后的路由。"""
@@ -297,6 +321,15 @@ class TestNodeFunctions:
         assert result["approval_required"] is False
         assert result["phase"] == "developing"
         assert result["iteration"] == 1
+
+    def test_security_check_requires_approval_for_critical_issue(self):
+        import asyncio
+
+        from app.graph import security_check
+        result = asyncio.run(security_check(_state(review=_high_risk_review_result())))
+        assert result["phase"] == "awaiting_approval"
+        assert result["approval_required"] is True
+        assert result["security_review"]["result"]["requires_approval"] is True
 
 
 # =============================================================================

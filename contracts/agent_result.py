@@ -112,7 +112,7 @@ class PatchResult(BaseModel):
 class ReviewIssue(BaseModel):
     """审查发现的问题"""
 
-    severity: Literal["critical", "major", "minor", "suggestion"]
+    severity: Literal["critical", "high", "major", "minor", "suggestion"]
     file_path: str
     line_range: str | None = None
     description: str

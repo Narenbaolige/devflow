@@ -292,22 +292,40 @@ async def review_code(state: TeamState) -> TeamState:
 
 
 async def security_check(state: TeamState) -> TeamState:
-    """安全审查节点 → 调用 Security Agent [B]（两周版：集成入 Reviewer）"""
+    """将 Reviewer 的安全风险转化为可审计的审批决策。"""
     if _cancelled(state, "security_check"):
         return state
-    from contracts.agent_result import AgentResult, AgentRole
+    from contracts.agent_result import AgentResult, AgentRole, SecurityIssue, SecurityResult
 
     state["phase"] = "security_check"
+    review_result = (state.get("review") or {}).get("result") or {}
+    security_issues = []
+    for issue in review_result.get("issues") or []:
+        severity = {"major": "medium", "minor": "low", "suggestion": "low"}.get(
+            issue.get("severity", "low"), issue.get("severity", "low")
+        )
+        security_issues.append(SecurityIssue(
+            vulnerability_type="reviewer_reported",
+            severity=severity,
+            file_path=issue.get("file_path", "unknown"),
+            line_range=issue.get("line_range"),
+            description=issue.get("description", "Reviewer 标记的安全风险"),
+            remediation=issue.get("suggestion", "请人工确认并修复"),
+        ))
+    requires_approval = (
+        review_result.get("risk_level") == "high"
+        or any(issue.severity in {"critical", "high"} for issue in security_issues)
+    )
     state["security_review"] = AgentResult(
         agent_role=AgentRole.SECURITY,
         success=True,
-        result={
-            "passed": True,
-            "issues": [],
-            "summary": "Mock: 安全审查通过",
-            "requires_approval": False,
-        },
-        reasoning="Mock: 安全审查完成",
+        result=SecurityResult(
+            passed=not requires_approval,
+            issues=security_issues,
+            summary=("发现高风险安全问题，等待人工审批" if requires_approval else "安全审查通过"),
+            requires_approval=requires_approval,
+        ).model_dump(),
+        reasoning="根据 Reviewer 安全风险结果生成审批决策",
     ).model_dump()
 
     # 判断是否需要审批
@@ -410,7 +428,13 @@ def route_after_review(state: TeamState) -> ReviewRoute:
     if state.get("cancel_requested"):
         return "handle_error"
     review = state.get("review", {})
-    if review.get("result", {}).get("passed", False):
+    result = review.get("result", {})
+    issues = result.get("issues", []) or []
+    if result.get("risk_level") == "high" or any(
+        issue.get("severity") in {"critical", "high"} for issue in issues
+    ):
+        return "security_check"
+    if result.get("passed", False):
         return "security_check"
     if state.get("iteration", 0) >= state.get("max_iterations", 3):
         return "handle_error"

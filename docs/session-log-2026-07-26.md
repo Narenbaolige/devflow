@@ -48,6 +48,11 @@ CHECKPOINTER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devflow
   不再依赖进程内 `_tasks_store`。
 - 因此 PostgreSQL 模式下，服务重启后任务详情和任务列表均可恢复。
 
+### 5. 审批风险链路
+
+- 安全审查根据 Reviewer 的 `risk_level` 和问题严重度生成审批决策，不再固定通过。
+- 出现 `critical` 或 `high` 风险时工作流暂停在 `awaiting_approval`；拒绝后携带反馈返工。
+
 ## 修改文件
 
 | 文件 | 说明 |
