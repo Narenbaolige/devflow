@@ -65,6 +65,21 @@ class TestTaskEndpoints:
         assert "tasks" in data
         assert "total" in data
 
+    def test_list_tasks_reads_checkpointer_after_memory_cache_is_cleared(self, client):
+        """列表不应依赖进程内缓存，模拟重启后仍可枚举 checkpoint 任务。"""
+        from app.api.tasks import _tasks_store
+
+        create_resp = client.post("/tasks", json={
+            "requirement": "验证持久化任务列表",
+            "repo_url": "https://github.com/example/demo-repo",
+        })
+        task_id = create_resp.json()["task_id"]
+
+        _tasks_store.clear()
+        response = client.get("/tasks")
+        assert response.status_code == 200
+        assert any(task["task_id"] == task_id for task in response.json()["tasks"])
+
     def test_cancel_task(self, client):
         """取消任务应返回 200。"""
         create_resp = client.post("/tasks", json={

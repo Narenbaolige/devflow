@@ -25,7 +25,8 @@ from contracts.state import create_initial_state
 router = APIRouter()
 
 # =============================================================================
-# 内存存储（Day 1-7: 内存字典；Day 8: 切换为 SQLite）
+# 内存缓存只用于当前进程加速。任务列表的真实来源是 LangGraph Checkpointer，
+# 因而 PostgreSQL 模式在服务重启后仍可列出历史任务。
 # =============================================================================
 
 _tasks_store: dict[str, dict] = {}
@@ -40,6 +41,39 @@ async def _checkpoint_state(task_id: str) -> dict | None:
         _tasks_store[task_id] = state
         return state
     return _tasks_store.get(task_id)
+
+
+async def _checkpoint_task_states() -> list[dict]:
+    """读取每个任务线程的最新 checkpoint 状态。
+
+    ``alist(None)`` 返回所有 checkpoint（按新到旧排序）。同一任务会有多个
+    checkpoint，因此仅保留首次遇到的 thread_id。内存缓存仅作为不支持枚举的
+    Checkpointer 的兼容后备。
+    """
+    checkpointer = getattr(workflow.graph, "checkpointer", None)
+    if checkpointer is None or not hasattr(checkpointer, "alist"):
+        return list(_tasks_store.values())
+
+    states: list[dict] = []
+    seen_task_ids: set[str] = set()
+    try:
+        async for checkpoint in checkpointer.alist(None):
+            values = checkpoint.checkpoint.get("channel_values", {})
+            meta = values.get("task_meta")
+            if not isinstance(meta, dict):
+                continue
+            task_id = meta.get("task_id")
+            if not task_id or task_id in seen_task_ids:
+                continue
+            seen_task_ids.add(task_id)
+            state = dict(values)
+            _tasks_store[task_id] = state
+            states.append(state)
+    except (AttributeError, TypeError):
+        # 自定义 checkpointer 未实现全量枚举时，仍保持本地开发可用。
+        return list(_tasks_store.values())
+
+    return states
 
 
 # =============================================================================
@@ -145,8 +179,8 @@ async def list_tasks(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    """列出所有任务。"""
-    all_tasks = list(_tasks_store.values())
+    """列出任务；PostgreSQL 模式下服务重启后仍返回历史任务。"""
+    all_tasks = await _checkpoint_task_states()
     page = all_tasks[offset:offset + limit]
 
     tasks = [

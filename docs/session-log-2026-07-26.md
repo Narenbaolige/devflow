@@ -42,6 +42,12 @@ CHECKPOINTER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devflow
 
 - 增加 `langgraph-checkpoint-postgres` 项目依赖。
 
+### 4. 任务列表跨重启恢复
+
+- `GET /tasks` 改为从 LangGraph Checkpointer 枚举每个任务线程的最新状态，
+  不再依赖进程内 `_tasks_store`。
+- 因此 PostgreSQL 模式下，服务重启后任务详情和任务列表均可恢复。
+
 ## 修改文件
 
 | 文件 | 说明 |
