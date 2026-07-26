@@ -40,7 +40,7 @@ class TestExecuteBasics:
 
     def test_timeout(self, sandbox):
         """超时的命令应标记 timed_out=True。"""
-        r = sandbox.execute("sleep 10", timeout=1)
+        r = sandbox.execute("python -c \"import time; time.sleep(10)\"", timeout=1)
         assert r.timed_out
         assert r.exit_code == -1
 
@@ -55,14 +55,14 @@ class TestFilePersistence:
     def test_file_written_by_one_command_readable_by_next(self, sandbox):
         """echo 写入文件后，下一个 execute 应能读到。"""
         sandbox.execute("echo persistence-test > data.txt")
-        r = sandbox.execute("cat data.txt")
+        r = sandbox.execute("type data.txt")
         assert r.exit_code == 0
         assert "persistence-test" in r.stdout
 
     def test_cwd_is_same_across_calls(self, sandbox):
         """默认 cwd 在两次调用中保持一致。"""
         sandbox.execute("echo first > marker.txt")
-        r = sandbox.execute("cat marker.txt")
+        r = sandbox.execute("type marker.txt")
         assert "first" in r.stdout
 
 
@@ -78,14 +78,14 @@ class TestCwdResolution:
         r = sandbox.execute("echo cwd-test > where-am-i.txt")
         assert r.exit_code == 0
         # 文件应在当前 cwd 创建
-        r2 = sandbox.execute("cat where-am-i.txt")
+        r2 = sandbox.execute("type where-am-i.txt")
         assert "cwd-test" in r2.stdout
 
     def test_relative_cwd(self, sandbox):
         """cwd="subdir" 应解析为 workspace/subdir。"""
-        sandbox.execute("mkdir -p subdir")
+        sandbox.execute("mkdir subdir")
         sandbox.execute("echo nested > subdir/f.txt")
-        r = sandbox.execute("cat f.txt", cwd="subdir")
+        r = sandbox.execute("type f.txt", cwd="subdir")
         assert r.exit_code == 0
         assert "nested" in r.stdout
 
@@ -93,7 +93,7 @@ class TestCwdResolution:
         """绝对路径 cwd 应在指定目录执行。"""
         marker = tmp_path / "marker.txt"
         marker.write_text("absolute-test")
-        r = sandbox.execute(f"cat {marker}")
+        r = sandbox.execute(f"type {marker}")
         assert "absolute-test" in r.stdout
 
 
@@ -145,14 +145,15 @@ class TestRealRepoPipeline:
         )
         assert r.exit_code == 0, f"clone 失败: {r.stderr or r.stdout[:200]}"
 
-        r = sandbox.execute(
-            "(pip install -q -e . 2>&1 || "
-            "[ -f requirements.txt ] && pip install -q -r requirements.txt || true)",
-            cwd="repo",
-            timeout=180,
-        )
-        # pip install 可能返回非零也不影响 — 有些项目不需要安装
-        # （markupsafe 需要，否则 import markupsafe 会失败）
+        # 安装依赖：先尝试 pip install -e .，失败则检查 requirements.txt
+        r = sandbox.execute("pip install -q -e .", cwd="repo", timeout=180)
+        if r.exit_code != 0:
+            check = sandbox.execute(
+                "python -c \"import os; exit(0 if os.path.exists('requirements.txt') else 1)\"",
+                cwd="repo",
+            )
+            if check.exit_code == 0:
+                sandbox.execute("pip install -q -r requirements.txt", cwd="repo", timeout=180)
 
         r = sandbox.execute(
             "python -m pytest --tb=short -v 2>&1",

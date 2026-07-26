@@ -2,14 +2,15 @@
 本地沙箱实现（默认模式）。
 
 使用 subprocess 在本机直接执行命令，零额外依赖。
-策略与 Claude Code 一致：直接在本机跑命令，沙箱是工具不是决策者。
+策略与 Claude Code 一致：直接在本机跑命令，使用系统原生 shell。
 
-实现 execute(command, cwd, timeout) → CommandResult。
-在系统临时目录中管理文件，首次调用自动创建，cleanup() 或 __del__ 时删除。
+复杂逻辑由调用方拆分为多次 execute() 调用，
+避免依赖特定 shell 语法（bash / PowerShell / cmd 差异）。
 
 启用方式：SANDBOX_MODE=local（默认）
 """
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -24,6 +25,7 @@ class LocalSandbox(BaseSandbox):
     本地沙箱引擎。
 
     Agent 通过 execute() 自行决定跑什么命令。
+    每条命令独立执行，文件系统跨调用持久。
 
     用法：
         sandbox = LocalSandbox()
@@ -45,6 +47,9 @@ class LocalSandbox(BaseSandbox):
     ) -> CommandResult:
         """
         在本机执行一条 shell 命令。
+
+        使用系统原生 shell（Windows: cmd / PowerShell，Linux: /bin/sh）。
+        调用方负责将复杂逻辑拆分为多次 execute() 调用。
 
         cwd 解析规则：
           - "/workspace" → 自动创建的临时目录
@@ -91,9 +96,18 @@ class LocalSandbox(BaseSandbox):
 
     def cleanup(self) -> None:
         """删除临时工作区。"""
-        if self._workspace and self._workspace.exists():
-            shutil.rmtree(self._workspace, ignore_errors=True)
-            self._workspace = None
+        if self._workspace is None:
+            return
+        ws = self._workspace
+        self._workspace = None
+        if not ws.exists():
+            return
+        for _ in range(3):
+            try:
+                shutil.rmtree(ws)
+                break
+            except OSError:
+                time.sleep(0.1)
 
     def __del__(self):
         self.cleanup()
