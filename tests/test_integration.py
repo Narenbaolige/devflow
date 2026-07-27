@@ -394,3 +394,177 @@ class TestReworkLoop:
         result = await graph.ainvoke(s, config)
         # Mock run_tests 追加一条成功记录，总共 3 条
         assert len(result["sandbox_results"]) >= 3
+
+
+# =============================================================================
+# 审批-拒绝-返工异常路径（P13）
+# =============================================================================
+
+
+class TestApprovalReworkFlow:
+    """验证 security → approval → reject → rework 的完整异常路径。"""
+
+    def test_security_check_critical_routes_to_await_approval(self):
+        """Reviewer 发现 critical issue → security_check 设置 approval_required。"""
+        import asyncio
+        from app.graph import security_check
+
+        s = _state(review=_high_risk_review_result())
+        result = asyncio.run(security_check(s))
+        assert result["phase"] == "awaiting_approval"
+        assert result["approval_required"] is True
+        sec = result["security_review"]["result"]
+        assert sec["requires_approval"] is True
+        assert len(sec["issues"]) > 0
+
+    def test_security_check_low_risk_skips_approval(self):
+        """低风险审查不触发审批，直接完成。"""
+        import asyncio
+        from app.graph import security_check
+
+        s = _state(review=_review_result(passed=True))
+        result = asyncio.run(security_check(s))
+        assert result["phase"] == "done"
+        assert result["approval_required"] is False
+
+    def test_approval_rejection_increments_iteration_and_returns_to_develop(self):
+        """审批拒绝 → iteration+1 → phase=developing → 触发返工。"""
+        import asyncio
+        from app.graph import await_approval
+
+        s = _state(
+            phase="awaiting_approval",
+            approval_required=True,
+            approval_granted=False,
+            iteration=0,
+        )
+        result = asyncio.run(await_approval(s))
+        assert result["approval_granted"] is False
+        assert result["approval_required"] is False
+        assert result["phase"] == "developing"
+        assert result["iteration"] == 1
+
+    def test_approval_approval_allows_completion(self):
+        """审批通过 → phase=done，任务完成。"""
+        import asyncio
+        from app.graph import await_approval
+
+        s = _state(
+            phase="awaiting_approval",
+            approval_required=True,
+            approval_granted=True,
+        )
+        result = asyncio.run(await_approval(s))
+        assert result["approval_granted"] is True
+        assert result["approval_required"] is False
+        assert result["phase"] == "done"
+
+    def test_route_after_security_approval_required(self):
+        """route_after_security 在 requires_approval=True 时路由到 await_approval。"""
+        from app.graph import route_after_security
+
+        s = _state(security_review=_security_result(requires_approval=True))
+        result = route_after_security(s)
+        assert result == "await_approval"
+
+    def test_route_after_security_no_approval_required(self):
+        """route_after_security 在不需要审批时路由到 done。"""
+        from app.graph import route_after_security
+
+        s = _state(security_review=_security_result(requires_approval=False))
+        result = route_after_security(s)
+        assert result == "done"
+
+
+# =============================================================================
+# 取消场景（P13）
+# =============================================================================
+
+
+class TestCancelFlow:
+    """验证协作式取消在各种阶段的行为。"""
+
+    def test_cancel_during_awaiting_approval(self):
+        """在 awaiting_approval 阶段取消，任务应标记为 cancelled。"""
+        import asyncio
+        from app.graph import await_approval
+
+        s = _state(
+            phase="awaiting_approval",
+            approval_required=True,
+            cancel_requested=True,
+        )
+        result = asyncio.run(await_approval(s))
+        assert result["phase"] in ("cancelled", "awaiting_approval")
+
+    def test_cancel_requested_routes_to_handle_error_in_test(self):
+        """cancel_requested=True 时 route_after_test 应路由到 handle_error。"""
+        from app.graph import route_after_test
+
+        s = _state(
+            cancel_requested=True,
+            sandbox_results=[_sandbox_result("failure", failed=1)],
+        )
+        result = route_after_test(s)
+        assert result == "handle_error"
+
+    def test_cancel_before_agent_skips_execution(self):
+        """cancel_requested=True 时 agent_node 预检跳过，不写入产出物。"""
+        import asyncio
+        from app.agents import RequirementAgent, agent_node
+
+        async def _run():
+            s = _state(cancel_requested=True)
+            return await agent_node(s, RequirementAgent())
+
+        result = asyncio.run(_run())
+        # 取消预检后 agent 未被调用，requirement_analysis 仍为 None
+        assert result.get("requirement_analysis") is None
+
+
+# =============================================================================
+# 返工上限全链路（P13）
+# =============================================================================
+
+
+class TestReworkLimitFullFlow:
+    """验证 iteration 达到 max_iterations 时系统自动终止。"""
+
+    @pytest.mark.asyncio
+    async def test_max_iteration_stops_at_handle_error(self):
+        """iteration 已达上限 + 测试失败 → handle_error → phase=failed。"""
+        from app.graph import graph
+
+        s = _state(
+            iteration=3,
+            max_iterations=3,
+            sandbox_results=[_sandbox_result("failure", failed=1)],
+        )
+        config = {"configurable": {"thread_id": "it-max-stop"}}
+        result = await graph.ainvoke(s, config)
+        # 超限后 route_after_test → handle_error → phase=failed
+        assert result["phase"] in ("failed", "done")
+
+    def test_route_after_review_at_max_iteration(self):
+        """审查失败 + iteration 达上限 → handle_error，不再返工。"""
+        from app.graph import route_after_review
+
+        s = _state(
+            review=_review_result(passed=False),
+            iteration=3,
+            max_iterations=3,
+        )
+        result = route_after_review(s)
+        assert result == "handle_error"
+
+    def test_route_after_review_under_max_iteration(self):
+        """审查失败 + iteration 未达上限 → develop_changes，触发返工。"""
+        from app.graph import route_after_review
+
+        s = _state(
+            review=_review_result(passed=False),
+            iteration=2,
+            max_iterations=3,
+        )
+        result = route_after_review(s)
+        assert result == "develop_changes"
