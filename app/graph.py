@@ -72,13 +72,6 @@ def _blocked(state: TeamState, node_name: str) -> bool:
     return _cancelled(state, node_name) or _limits_exceeded(state, node_name)
 
 
-def _record_agent_cost(state: TeamState, artifact: dict | None) -> None:
-    """累计 AgentResult invocation 中的真实模型费用。"""
-    invocation = (artifact or {}).get("invocation") or {}
-    state["budget_used_usd"] = round(
-        state.get("budget_used_usd", 0.0) + float(invocation.get("cost_usd", 0.0) or 0.0), 6
-    )
-
 # =============================================================================
 # 节点实现（Day 1-2: 先用 Mock，Day 3-5: 替换为真实调用）
 # =============================================================================
@@ -99,7 +92,6 @@ async def analyze_requirement(state: TeamState) -> TeamState:
 
     state["phase"] = "analyzing"
     state = await agent_node(state, RequirementAgent())
-    _record_agent_cost(state, state.get("requirement_analysis"))
     state["phase"] = "planning"
     _record_event(state, "node_complete", "需求分析完成", "analyze_requirement")
     return state
@@ -113,7 +105,6 @@ async def plan_solution(state: TeamState) -> TeamState:
 
     state["phase"] = "planning"
     state = await agent_node(state, PlannerAgent())
-    _record_agent_cost(state, state.get("plan"))
     state["phase"] = "developing"
     _record_event(state, "node_complete", "方案规划完成", "plan_solution")
     return state
@@ -324,7 +315,6 @@ async def review_code(state: TeamState) -> TeamState:
 
     state["phase"] = "reviewing"
     state = await agent_node(state, ReviewerAgent())
-    _record_agent_cost(state, state.get("review"))
     state["phase"] = "security_check"
     _record_event(state, "node_complete", "代码审查完成", "review_code")
     return state

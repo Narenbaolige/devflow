@@ -6,7 +6,9 @@ Agent 基类与通用工具。
 
 import asyncio
 import time
+import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -244,11 +246,11 @@ class AgentBase(ABC):
                 result=result.model_dump() if hasattr(result, "model_dump") else result,
                 invocation=AgentInvocation(
                     agent_role=self.role,
-                    model=getattr(llm, "model_name", "unknown"),
+                    model=getattr(llm, "model", "unknown"),
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     cost_usd=estimate_cost(
-                        getattr(llm, "model_name", "unknown"), input_tokens, output_tokens
+                        getattr(llm, "model", "unknown"), input_tokens, output_tokens
                     ),
                     duration_ms=duration_ms,
                     retry_count=retry_count,
@@ -303,9 +305,64 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
 
     Agent 的输出会自动写入 state 中的对应字段。
     """
+    # ── P3: 调用前检查 — 任务已取消则跳过 Agent 调用 ──
+    if state.get("cancel_requested"):
+        return state
+
     # LLM 调用是同步 SDK 操作；放在线程中避免阻塞 API 事件循环，
     # 使取消、状态查询等请求仍可被处理。
     result = await asyncio.to_thread(agent.invoke, state)
+
+    # ── P3: 调用后检查 — 调用期间被取消则不写入产出物 ──
+    if state.get("cancel_requested"):
+        return state
+
+    agent_name = agent.role.value
+
+    # ── P2: 统一记录 Agent 调用费用 ──
+    if result.invocation and result.invocation.cost_usd:
+        state["budget_used_usd"] = round(
+            state.get("budget_used_usd", 0.0) + float(result.invocation.cost_usd), 6
+        )
+
+    # ── P4: Agent 级别事件记录 ──
+    if not result.success and result.reasoning and "[FALLBACK]" in result.reasoning:
+        state.setdefault("events", []).append({
+            "event_id": str(uuid.uuid4()),
+            "task_id": state["task_meta"]["task_id"],
+            "event_type": "agent_fallback",
+            "node_name": state.get("current_node", ""),
+            "timestamp": datetime.now().isoformat(),
+            "message": f"{agent_name} Agent LLM 调用失败，已降级为 Mock",
+            "data": {"phase": state.get("phase"), "agent": agent_name},
+        })
+
+    if result.invocation:
+        state.setdefault("events", []).append({
+            "event_id": str(uuid.uuid4()),
+            "task_id": state["task_meta"]["task_id"],
+            "event_type": "agent_complete",
+            "node_name": state.get("current_node", ""),
+            "timestamp": datetime.now().isoformat(),
+            "message": (
+                f"{agent_name} Agent 完成 — "
+                f"model={result.invocation.model}, "
+                f"tokens={result.invocation.input_tokens}+{result.invocation.output_tokens}, "
+                f"cost=${result.invocation.cost_usd:.4f}, "
+                f"duration={result.invocation.duration_ms}ms, "
+                f"retries={result.invocation.retry_count}"
+            ),
+            "data": {
+                "phase": state.get("phase"),
+                "agent": agent_name,
+                "model": result.invocation.model,
+                "input_tokens": result.invocation.input_tokens,
+                "output_tokens": result.invocation.output_tokens,
+                "cost_usd": result.invocation.cost_usd,
+                "duration_ms": result.invocation.duration_ms,
+                "retry_count": result.invocation.retry_count,
+            },
+        })
 
     # 根据 Agent 角色写入不同字段
     field_map = {
