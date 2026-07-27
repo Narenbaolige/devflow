@@ -329,7 +329,7 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
         )
 
     # ── P4: Agent 级别事件记录 ──
-    if not result.success and result.reasoning and "[FALLBACK]" in result.reasoning:
+    if result.reasoning and "[FALLBACK]" in result.reasoning:
         state.setdefault("events", []).append({
             "event_id": str(uuid.uuid4()),
             "task_id": state["task_meta"]["task_id"],
