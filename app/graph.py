@@ -4,6 +4,8 @@ LangGraph 工作流定义。
 DevFlow 的核心编排引擎。定义所有节点、条件边和 Checkpointer。
 """
 
+import asyncio
+import os
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -15,10 +17,10 @@ from contracts.state import TeamState
 
 
 # =============================================================================
-# 切换开关：设为 False 启用真实沙箱（与 Agent.USE_MOCK 同步切换）
-# Day 2 — Mock 全流程；Day 3 — 切为 False 接入真实沙箱
+# 沙箱 Mock 开关：通过环境变量 DEVFLOW_USE_MOCK 控制，默认 true
+# 注意：沙箱和 Agent 可以独立控制。设置 DEVFLOW_USE_SANDBOX=false 单独启用真实沙箱
 # =============================================================================
-_USE_MOCK_SANDBOX = True
+_USE_MOCK_SANDBOX = os.getenv("DEVFLOW_USE_SANDBOX", os.getenv("DEVFLOW_USE_MOCK", "true")).lower() == "true"
 
 
 def _record_event(state: TeamState, event_type: str, message: str, node_name: str) -> None:
@@ -72,6 +74,11 @@ def _blocked(state: TeamState, node_name: str) -> bool:
     return _cancelled(state, node_name) or _limits_exceeded(state, node_name)
 
 
+async def _sandbox_call(sandbox, command: str, *, cwd: str = "/workspace", timeout: int = 60):
+    """在独立线程中调用沙箱命令，避免阻塞事件循环。"""
+    return await asyncio.to_thread(sandbox.execute, command, cwd=cwd, timeout=timeout)
+
+
 # =============================================================================
 # 节点实现（Day 1-2: 先用 Mock，Day 3-5: 替换为真实调用）
 # =============================================================================
@@ -116,6 +123,8 @@ async def develop_changes(state: TeamState) -> TeamState:
         return state
     from app.agents import DeveloperAgent, agent_node
 
+    # 在节点中计数迭代（不在条件路由中修改 state，LangGraph 才会持久化）
+    state["iteration"] = state.get("iteration", 0) + 1
     state["phase"] = "developing"
     state = await agent_node(state, DeveloperAgent())
     state["phase"] = "testing"
@@ -147,7 +156,8 @@ async def apply_patches(state: TeamState) -> TeamState:
         sandbox = get_sandbox(task_id)
 
         # Step 1: clone 仓库
-        r = sandbox.execute(
+        r = await _sandbox_call(
+            sandbox,
             f"git clone --depth 1 --branch {meta['branch']} {meta['repo_url']} repo",
             timeout=120,
         )
@@ -168,7 +178,7 @@ async def apply_patches(state: TeamState) -> TeamState:
                 from pathlib import Path
                 patch_file = Path(tempfile.gettempdir()) / f"devflow-patch-{task_id}-{i}.diff"
                 patch_file.write_text(diff, encoding="utf-8")
-                r = sandbox.execute(f"git apply {patch_file}", cwd="repo")
+                r = await _sandbox_call(sandbox, f"git apply {patch_file}", cwd="repo")
                 patch_file.unlink(missing_ok=True)
                 if r.exit_code != 0:
                     _record_event(state, "error", f"Patch {i} 应用失败: {r.stderr or r.stdout[:200]}", "apply_patches")
@@ -225,20 +235,21 @@ async def run_tests(state: TeamState) -> TeamState:
         sandbox = get_sandbox(task_id)
 
         # 安装依赖：先尝试 pip install -e .，失败则检查 requirements.txt
-        r = sandbox.execute("pip install -q -e .", cwd="repo", timeout=180)
+        r = await _sandbox_call(sandbox, "pip install -q -e .", cwd="repo", timeout=180)
         if r.exit_code != 0:
             # 检查 requirements.txt 是否存在
-            check = sandbox.execute(
+            check = await _sandbox_call(
+                sandbox,
                 "python -c \"import os; exit(0 if os.path.exists('requirements.txt') else 1)\"",
                 cwd="repo",
             )
             if check.exit_code == 0:
-                sandbox.execute("pip install -q -r requirements.txt", cwd="repo", timeout=180)
+                await _sandbox_call(sandbox, "pip install -q -r requirements.txt", cwd="repo", timeout=180)
 
         # 运行 pytest
         import time
         start = time.time()
-        r = sandbox.execute("python -m pytest --tb=short -v 2>&1", cwd="repo", timeout=300)
+        r = await _sandbox_call(sandbox, "python -m pytest --tb=short -v 2>&1", cwd="repo", timeout=300)
         duration_ms = int((time.time() - start) * 1000)
 
         # 解析输出
@@ -445,8 +456,6 @@ def route_after_test(state: TeamState) -> Literal["review_code", "develop_change
         return "review_code"
     if state.get("iteration", 0) >= state.get("max_iterations", 3):
         return "handle_error"
-    # 条件边是返工的唯一入口；在此处计数，避免测试失败时无限循环。
-    state["iteration"] = state.get("iteration", 0) + 1
     _record_event(state, "progress", "测试失败，进入返工", "run_tests")
     return "develop_changes"
 
@@ -469,7 +478,6 @@ def route_after_review(state: TeamState) -> ReviewRoute:
         return "security_check"
     if state.get("iteration", 0) >= state.get("max_iterations", 3):
         return "handle_error"
-    state["iteration"] = state.get("iteration", 0) + 1
     _record_event(state, "progress", "审查未通过，进入返工", "review_code")
     return "develop_changes"
 

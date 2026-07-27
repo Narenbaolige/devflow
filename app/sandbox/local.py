@@ -77,10 +77,12 @@ class LocalSandbox(BaseSandbox):
                 timeout=timeout,
             )
             duration_ms = int((time.time() - start_time) * 1000)
+            stdout = result.stdout.decode("utf-8", errors="replace")
+            stderr_out = result.stderr.decode("utf-8", errors="replace")
             return CommandResult(
                 exit_code=result.returncode,
-                stdout=result.stdout.decode("utf-8", errors="replace"),
-                stderr=result.stderr.decode("utf-8", errors="replace"),
+                stdout=stdout[-50_000:] if len(stdout) > 50_000 else stdout,
+                stderr=stderr_out[-10_000:] if len(stderr_out) > 10_000 else stderr_out,
                 timed_out=False,
                 duration_ms=duration_ms,
             )

@@ -151,7 +151,7 @@ class TestFullPipeline:
 
     @pytest.mark.asyncio
     async def test_happy_path_iteration_zero(self):
-        """一次通过的任务 iteration 应为 0（无返工）。"""
+        """一次通过的任务 iteration 应为 1（develop_changes 执行一次后计数）。"""
         from app.graph import graph
 
         state = create_initial_state(
@@ -160,7 +160,7 @@ class TestFullPipeline:
         )
         config = {"configurable": {"thread_id": "it-iter"}}
         result = await graph.ainvoke(state, config)
-        assert result["iteration"] == 0
+        assert result["iteration"] == 1
 
 
 # =============================================================================

@@ -5,6 +5,8 @@ Agent 基类与通用工具。
 """
 
 import asyncio
+import json
+import os
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -30,8 +32,9 @@ class AgentBase(ABC):
       - mock_result(state): 返回 Mock 的 AgentResult（Day 2 使用）
     """
 
-    # Day 2: True（Mock 模式，不调 LLM）；Day 3+: False（真实 LLM 调用）
-    USE_MOCK: bool = True
+    # Mock 模式：true（不调 LLM）/ false（真实 LLM 调用）
+    # 通过环境变量 DEVFLOW_USE_MOCK 控制，默认 true（安全）
+    USE_MOCK: bool = os.getenv("DEVFLOW_USE_MOCK", "true").lower() == "true"
 
     # LLM 调用失败时是否自动降级为 Mock 输出（保证流程不中断）
     FALLBACK_TO_MOCK_ON_ERROR: bool = True
@@ -191,29 +194,36 @@ class AgentBase(ABC):
             context = self.build_context(state)
             context = self._clip_context(context)
 
-            # 构建消息
+            schema_json = json.dumps(
+                self.output_schema.model_json_schema(), ensure_ascii=False, indent=2
+            )
+
+            # 构建消息 — 在 System Prompt 末尾追加 JSON 输出格式要求
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": context},
+                {"role": "user", "content": (
+                    "请严格按照以下 JSON Schema 格式返回结果，仅输出 JSON，"
+                    "不要包含额外说明文字：\n```json\n" + schema_json + "\n```"
+                )},
             ]
 
+            raw_text: str | None = None
             for attempt in range(3):  # 最多 3 次尝试（含格式修复）
                 try:
-                    structured_llm = llm.with_structured_output(self.output_schema)
-                    result = structured_llm.invoke(messages)
+                    response = llm.invoke(messages)
+                    raw_text = response.content if hasattr(response, "content") else str(response)
+                    from app.agents.validator import validate_against_model
+                    result = validate_against_model(raw_text, self.output_schema)
                     break
                 except Exception as e:
                     retry_count = attempt
                     last_error = str(e)
                     if attempt < 2:
+                        hint = getattr(e, "fix_hint", str(e))
                         messages.append({
                             "role": "user",
-                            "content": (
-                                f"你的上一次输出不符合要求的 JSON Schema。\n"
-                                f"错误: {e}\n"
-                                f"请严格按照 "
-                                f"{self.output_schema.model_json_schema()} 的格式重新输出。"
-                            ),
+                            "content": f"上一次输出格式有误，请修正后重新输出。\n错误: {hint}",
                         })
             else:
                 # 3 次尝试全部失败
@@ -223,9 +233,9 @@ class AgentBase(ABC):
 
             duration_ms = int((time.time() - start_time) * 1000)
 
-            # 尝试获取 Token 信息（取决于 LLM provider）
+            # 提取 Token 信息（从 LangChain AIMessage response_metadata）
             try:
-                meta = getattr(result, "response_metadata", {}) or {}
+                meta = getattr(response, "response_metadata", {}) or {}
                 usage = meta.get("token_usage", {}) or meta.get("usage", {})
                 input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
                 output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
@@ -233,17 +243,10 @@ class AgentBase(ABC):
                 input_tokens = 0
                 output_tokens = 0
 
-            # 校验结构化输出（处理 LangChain 解析器未能捕获的边缘情况）
-            if isinstance(result, str):
-                from app.agents.validator import validate_against_model
-                result = validate_against_model(result, self.output_schema)
-            elif isinstance(result, dict):
-                result = self.output_schema.model_validate(result)
-
             return AgentResult(
                 agent_role=self.role,
                 success=True,
-                result=result.model_dump() if hasattr(result, "model_dump") else result,
+                result=result.model_dump(),
                 invocation=AgentInvocation(
                     agent_role=self.role,
                     model=getattr(llm, "model", "unknown"),
