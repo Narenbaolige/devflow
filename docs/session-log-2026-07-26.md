@@ -64,6 +64,11 @@ CHECKPOINTER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devflow
 - 新增 `docs/api.md`，涵盖任务生命周期、任务控制、事件流、统计和持久化配置。
 - 新增 `GET /tasks/stats`，从 Checkpointer 的任务状态汇总阶段、迭代、耗时、Token 和费用。
 
+### 8. 实时事件流
+
+- `GET /tasks/{id}/events` 改为持续 SSE 连接：回放历史事件后，轮询 Checkpointer 并推送新增事件。
+- 任务结束后自动关闭连接；轮询间隔通过 `SSE_POLL_INTERVAL_MS` 配置。
+
 ## 修改文件
 
 | 文件 | 说明 |

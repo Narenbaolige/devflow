@@ -99,7 +99,9 @@ POST /tasks → init → analyzing → planning → developing → testing
 
 `GET /tasks/{task_id}/events`
 
-响应类型为 `text/event-stream`，以 SSE 格式回放该任务已记录的事件。常见事件包括：
+响应类型为 `text/event-stream`。连接建立后会先回放历史事件，随后每 500ms
+从 Checkpointer 读取并推送新增事件；任务进入 `done`、`failed` 或 `cancelled`
+后自动关闭连接。常见事件包括：
 
 - `node_complete`：工作流节点完成；
 - `agent_complete`：Agent 调用完成，包含 token、费用和耗时；
@@ -115,7 +117,14 @@ event: agent_complete
 data: {"task_id":"a1b2c3d4","node_name":"planner","message":"planner Agent 完成"}
 ```
 
-当前接口回放历史事件；前端可定期重新请求以获得最新进度。
+浏览器可直接使用 `EventSource` 消费：
+
+```javascript
+const events = new EventSource(`/tasks/${taskId}/events`);
+events.addEventListener("node_complete", (message) => {
+  console.log(JSON.parse(message.data));
+});
+```
 
 ## 健康检查
 

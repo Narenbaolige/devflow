@@ -48,6 +48,7 @@ class Settings:
     AGENT_TIMEOUT_SECONDS: int = int(os.getenv("AGENT_TIMEOUT_SECONDS", "120"))
     TASK_TIMEOUT_SECONDS: int = int(os.getenv("TASK_TIMEOUT_SECONDS", "900"))
     TASK_BUDGET_USD: float = float(os.getenv("TASK_BUDGET_USD", "0"))
+    SSE_POLL_INTERVAL_MS: int = int(os.getenv("SSE_POLL_INTERVAL_MS", "500"))
 
     # Debug
     DEVFLOW_DEBUG_CONTEXT: bool = os.getenv("DEVFLOW_DEBUG_CONTEXT", "0") == "1"

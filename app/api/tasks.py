@@ -396,14 +396,42 @@ async def cancel_task(task_id: str):
 
 @router.get("/{task_id}/events")
 async def task_events(task_id: str):
-    """返回当前已记录事件的 SSE 流；前端可断线后重新拉取。"""
+    """实时 SSE：先回放历史事件，再推送 checkpoint 中新增的事件。"""
     state = await _checkpoint_state(task_id)
     if state is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
     async def stream() -> AsyncIterator[str]:
-        for event in state.get("events", []):
-            yield f"event: {event.get('event_type', 'progress')}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0)
+        seen_event_ids: set[str] = set()
+        terminal_phases = {"done", "failed", "cancelled"}
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+        while True:
+            latest_state = await _checkpoint_state(task_id)
+            if latest_state is None:
+                yield "event: error\ndata: {\"message\": \"任务不存在\"}\n\n"
+                return
+
+            for event in latest_state.get("events", []):
+                event_id = event.get("event_id")
+                if event_id and event_id in seen_event_ids:
+                    continue
+                if event_id:
+                    seen_event_ids.add(event_id)
+                yield (
+                    f"id: {event_id or ''}\n"
+                    f"event: {event.get('event_type', 'progress')}\n"
+                    f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                )
+
+            if latest_state.get("phase") in terminal_phases:
+                return
+
+            # 保持代理和浏览器连接活跃；下一轮读取 checkpoint 中的新增事件。
+            yield ": keep-alive\n\n"
+            await asyncio.sleep(settings.SSE_POLL_INTERVAL_MS / 1000)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

@@ -106,6 +106,8 @@ class TestTaskEndpoints:
             "repo_url": "https://github.com/example/demo-repo",
         })
         task_id = create_resp.json()["task_id"]
+        # SSE 对非终态任务会保持连接；先取消以验证历史回放和终态自动关闭。
+        client.post(f"/tasks/{task_id}/cancel")
 
         response = client.get(f"/tasks/{task_id}/events")
         assert response.status_code == 200
