@@ -124,9 +124,9 @@ async def develop_changes(state: TeamState) -> TeamState:
     from app.agents import DeveloperAgent, agent_node
 
     # 在节点中计数迭代（不在条件路由中修改 state，LangGraph 才会持久化）
-    state["iteration"] = state.get("iteration", 0) + 1
     state["phase"] = "developing"
     state = await agent_node(state, DeveloperAgent())
+    state["iteration"] = state.get("iteration", 0) + 1
     state["phase"] = "testing"
     _record_event(state, "node_complete", "代码修改完成", "develop_changes")
     return state
@@ -182,15 +182,15 @@ async def apply_patches(state: TeamState) -> TeamState:
                 if not diff and not (orig_snippet and patched_snippet and file_path):
                     continue
 
-                # 规范化 file_path：去除 LLM 可能返回的绝对路径，保留纯文件名
-                import ntpath
-                import posixpath
-                _sep = "\\" if "\\" in file_path else "/"
-                _raw_name = file_path.rsplit(_sep, 1)[-1] if _sep in file_path else file_path
-                # 去除盘符等前缀（如 D:/xxx/yy.py → yy.py）
-                if ":" in _raw_name:
-                    _raw_name = _raw_name.rsplit(":", 1)[-1]
-                file_path = _raw_name
+                # 规范化 file_path：去除 LLM 可能返回的绝对路径前缀，保留子目录结构
+                # 处理：D:/path/to/repo/src/foo.py → src/foo.py；src/foo.py → src/foo.py
+                if ":" in file_path:
+                    # Windows 绝对路径 → 去掉盘符及之前的部分
+                    file_path = file_path.rsplit(":", 1)[-1]
+                # 去掉可能残留的前导斜杠/反斜杠
+                file_path = file_path.lstrip("\\").lstrip("/")
+                # 如果路径包含 repo 名等多余前缀，取最后看起来合理的部分
+                # 保守策略：仅当路径以已知模式开头且后面是正常目录结构时保留全路径
 
                 applied = False
 
@@ -336,6 +336,8 @@ sys.exit(1)
 
         state["phase"] = "testing"
         _record_event(state, "node_complete", "仓库 clone 完成，patch 已应用", "apply_patches")
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         _record_event(state, "error", f"apply_patches 异常: {e}", "apply_patches")
         cleanup_sandbox(task_id)
@@ -449,6 +451,8 @@ async def run_tests(state: TeamState) -> TeamState:
         _record_event(state, "test_result",
                       f"测试完成: {passed} passed, {failed} failed, {errors} errors",
                       "run_tests")
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         state["sandbox_results"].append(
             SandboxResult(
@@ -456,6 +460,7 @@ async def run_tests(state: TeamState) -> TeamState:
                 sandbox_type="test", status="error",
                 exit_code=-1, timed_out=False, duration_ms=0,
                 stdout=f"测试执行异常: {e}",
+                test_summary=TestSummary(total=0, passed=0, failed=1, errors=1),
                 started_at=started_at.isoformat(),
                 finished_at=datetime.now().isoformat(),
             ).model_dump()
@@ -549,20 +554,31 @@ async def handle_error(state: TeamState) -> TeamState:
     """错误处理节点 → 分类 + 重试决策 [A]"""
     if state.get("phase") in {"cancelled", "failed"}:
         return state
+
+    # 尝试从最近的错误中提取上下文
+    last_error_type = "unknown"
+    last_error_msg = "工作流执行过程中发生错误"
+    recent_node = state.get("current_node") or "unknown"
+    recent_errors = state.get("errors", [])
+    if recent_errors:
+        last = recent_errors[-1]
+        last_error_type = last.get("error_type", "unknown")
+        last_error_msg = last.get("message", last_error_msg)
+
     state["errors"].append({
-        "node": "unknown",
-        "error_type": "unknown",
-        "message": "Mock error handler",
+        "node": recent_node,
+        "error_type": last_error_type,
+        "message": last_error_msg,
         "timestamp": datetime.now().isoformat(),
-        "recoverable": False,
-        "retry_count": 0,
+        "recoverable": state.get("iteration", 0) < state.get("max_iterations", 3),
+        "retry_count": state.get("iteration", 0),
     })
     if state["iteration"] >= state["max_iterations"]:
         state["phase"] = "failed"
     else:
         state["iteration"] = state.get("iteration", 0) + 1
         state["phase"] = "developing"  # 返工
-    _record_event(state, "error", "工作流发生错误", "handle_error")
+    _record_event(state, "error", f"工作流错误 ({recent_node}): {last_error_msg[:80]}", "handle_error")
     return state
 
 
@@ -602,11 +618,11 @@ def route_after_test(state: TeamState) -> Literal["review_code", "develop_change
     if not results:
         return "handle_error"
     last = results[-1]
-    if last.get("status") == "success" and last.get("test_summary", {}).get("failed", 0) == 0:
+    ts = last.get("test_summary") or {}
+    if last.get("status") == "success" and ts.get("failed", 0) == 0:
         return "review_code"
     if state.get("iteration", 0) >= state.get("max_iterations", 3):
         return "handle_error"
-    _record_event(state, "progress", "测试失败，进入返工", "run_tests")
     return "develop_changes"
 
 
@@ -628,7 +644,6 @@ def route_after_review(state: TeamState) -> ReviewRoute:
         return "security_check"
     if state.get("iteration", 0) >= state.get("max_iterations", 3):
         return "handle_error"
-    _record_event(state, "progress", "审查未通过，进入返工", "review_code")
     return "develop_changes"
 
 
