@@ -42,6 +42,10 @@ class AgentBase(ABC):
     # 上下文 Token 预算（粗糙估计：1 token ≈ 4 字符）
     max_context_tokens: int = 2000
 
+    # 是否启用工具调用（子类覆盖为 True 以开启）
+    ENABLE_TOOL_CALLING: bool = False
+    MAX_TOOL_ROUNDS: int = 5
+
     # System Prompt 缓存
     _cached_prompt: str | None = None
 
@@ -170,27 +174,33 @@ class AgentBase(ABC):
         """
         调用 Agent。
 
-        完整流程：
-        1. build_context: 提取上下文
-        2. LLM 调用: System Prompt + Context → 结构化输出
-        3. 校验: Pydantic 验证
-        4. 包装: AgentResult
-
-        Returns:
-            AgentResult，success=True 表示调用成功且输出合法。
+        流程：
+        1. Mock 模式 → mock_result(state)
+        2. 工具调用模式(ENABLE_TOOL_CALLING=True) → _invoke_with_tools
+        3. 纯 Prompt 模式(默认) → _invoke_prompt_only
         """
-        # Mock 模式：直接返回假数据，不调 LLM
         if self.USE_MOCK:
             return self.mock_result(state)
 
+        if llm is None:
+            llm = get_llm()
+
+        if self.ENABLE_TOOL_CALLING:
+            return self._invoke_with_tools(state, llm)
+
+        return self._invoke_prompt_only(state, llm)
+
+    # ------------------------------------------------------------------
+    # 纯 Prompt 模式（当前默认行为）
+    # ------------------------------------------------------------------
+
+    def _invoke_prompt_only(self, state: TeamState, llm) -> AgentResult:
+        """纯 Prompt 调用：System Prompt + Context → 结构化输出。"""
         start_time = time.time()
         retry_count = 0
         last_error = None
 
         try:
-            if llm is None:
-                llm = get_llm()
-
             context = self.build_context(state)
             context = self._clip_context(context)
 
@@ -198,7 +208,6 @@ class AgentBase(ABC):
                 self.output_schema.model_json_schema(), ensure_ascii=False, indent=2
             )
 
-            # 构建消息 — 在 System Prompt 末尾追加 JSON 输出格式要求
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": context},
@@ -209,7 +218,7 @@ class AgentBase(ABC):
             ]
 
             raw_text: str | None = None
-            for attempt in range(3):  # 最多 3 次尝试（含格式修复）
+            for attempt in range(3):
                 try:
                     response = llm.invoke(messages)
                     raw_text = response.content if hasattr(response, "content") else str(response)
@@ -226,14 +235,12 @@ class AgentBase(ABC):
                             "content": f"上一次输出格式有误，请修正后重新输出。\n错误: {hint}",
                         })
             else:
-                # 3 次尝试全部失败
                 raise RuntimeError(
                     f"Agent 调用 {retry_count + 1} 次重试后全部失败: {last_error}"
                 )
 
             duration_ms = int((time.time() - start_time) * 1000)
 
-            # 提取 Token 信息（从 LangChain AIMessage response_metadata）
             try:
                 meta = getattr(response, "response_metadata", {}) or {}
                 usage = meta.get("token_usage", {}) or meta.get("usage", {})
@@ -244,25 +251,20 @@ class AgentBase(ABC):
                 output_tokens = 0
 
             return AgentResult(
-                agent_role=self.role,
-                success=True,
-                result=result.model_dump(),
+                agent_role=self.role, success=True, result=result.model_dump(),
                 invocation=AgentInvocation(
                     agent_role=self.role,
                     model=getattr(llm, "model", "unknown"),
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
+                    input_tokens=input_tokens, output_tokens=output_tokens,
                     cost_usd=estimate_cost(
                         getattr(llm, "model", "unknown"), input_tokens, output_tokens
                     ),
-                    duration_ms=duration_ms,
-                    retry_count=retry_count,
+                    duration_ms=duration_ms, retry_count=retry_count,
                 ),
                 reasoning=f"{self.role.value} Agent 调用完成",
             )
 
         except Exception as e:
-            # LLM 调用失败 → 降级或返回错误
             duration_ms = int((time.time() - start_time) * 1000)
             last_error = str(e)
 
@@ -273,25 +275,177 @@ class AgentBase(ABC):
                     f"错误: {last_error[:100]}"
                 )
                 fallback.invocation = AgentInvocation(
-                    agent_role=self.role,
-                    model="mock-fallback",
-                    retry_count=retry_count + 1,
-                    duration_ms=duration_ms,
+                    agent_role=self.role, model="mock-fallback",
+                    retry_count=retry_count + 1, duration_ms=duration_ms,
                 )
                 return fallback
 
             return AgentResult(
-                agent_role=self.role,
-                success=False,
+                agent_role=self.role, success=False,
                 error=f"Agent 调用失败: {last_error}",
                 invocation=AgentInvocation(
-                    agent_role=self.role,
-                    model="unknown",
-                    retry_count=retry_count + 1,
-                    duration_ms=duration_ms,
+                    agent_role=self.role, model="unknown",
+                    retry_count=retry_count + 1, duration_ms=duration_ms,
                 ),
-                reasoning="调用失败",
-                next_action="retry",
+                reasoning="调用失败", next_action="retry",
+            )
+
+    # ------------------------------------------------------------------
+    # 工具调用模式
+    # ------------------------------------------------------------------
+
+    def _invoke_with_tools(self, state: TeamState, llm) -> AgentResult:
+        """带工具调用的 Agent 执行：LLM 可在沙箱中读文件/搜索/执行命令。"""
+        from app.tools.registry import get_tools_for_agent
+        from app.tools.tool_impls import TOOL_IMPL_MAP
+
+        tools = get_tools_for_agent(self.role.value)
+        if not tools:
+            return self._invoke_prompt_only(state, llm)
+
+        start_time = time.time()
+        task_id = state.get("task_meta", {}).get("task_id", "default")
+        context = self._clip_context(self.build_context(state))
+        schema_json = json.dumps(
+            self.output_schema.model_json_schema(), ensure_ascii=False, indent=2
+        )
+
+        # Build tool definitions in OpenAI function-calling format
+        tool_defs = []
+        for t in tools:
+            params = t.parameters or {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": t.description},
+                },
+            }
+            tool_defs.append({
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": params,
+                },
+            })
+
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": context},
+            {"role": "user", "content": (
+                "你可以使用工具在沙箱中执行操作（读文件、搜索代码、运行命令）。\n"
+                "获取足够信息后，请严格按照以下 JSON Schema 格式输出最终结果：\n```json\n"
+                + schema_json + "\n```"
+            )},
+        ]
+
+        total_input = 0
+        total_output = 0
+        model_name = getattr(llm, "model", "unknown")
+
+        for round_num in range(self.MAX_TOOL_ROUNDS):
+            try:
+                response = llm.invoke(messages, tools=tool_defs)
+            except Exception:
+                # If tool calling not supported by LLM, fall back to prompt-only
+                return self._invoke_prompt_only(state, llm)
+
+            # Track tokens
+            try:
+                meta = getattr(response, "response_metadata", {}) or {}
+                usage = meta.get("token_usage", {}) or meta.get("usage", {})
+                total_input += usage.get("input_tokens", usage.get("prompt_tokens", 0))
+                total_output += usage.get("output_tokens", usage.get("completion_tokens", 0))
+            except Exception:
+                pass
+
+            tool_calls = getattr(response, "tool_calls", None) or []
+            if not tool_calls:
+                # No tool calls → this should be the final output
+                raw_text = response.content if hasattr(response, "content") else str(response)
+                try:
+                    from app.agents.validator import validate_against_model
+                    result = validate_against_model(raw_text, self.output_schema)
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    return AgentResult(
+                        agent_role=self.role, success=True, result=result.model_dump(),
+                        invocation=AgentInvocation(
+                            agent_role=self.role, model=model_name,
+                            input_tokens=total_input, output_tokens=total_output,
+                            cost_usd=estimate_cost(model_name, total_input, total_output),
+                            duration_ms=duration_ms, retry_count=0,
+                        ),
+                        reasoning=f"{self.role.value} Agent 调用完成（{round_num}轮工具调用）",
+                    )
+                except Exception:
+                    # Output wasn't valid JSON → ask LLM to fix
+                    messages.append({
+                        "role": "user",
+                        "content": "输出不是有效的 JSON，请严格按照 JSON Schema 格式输出。",
+                    })
+                    continue
+
+            # Execute tool calls
+            for tc in tool_calls:
+                func_name = tc.get("name", "")
+                func_args = tc.get("arguments", {})
+                if isinstance(func_args, str):
+                    try:
+                        import json as _j
+                        func_args = _j.loads(func_args)
+                    except Exception:
+                        func_args = {}
+
+                impl = TOOL_IMPL_MAP.get(func_name)
+                if impl:
+                    try:
+                        tool_result = impl(task_id=task_id, **func_args)
+                    except Exception as e:
+                        tool_result = f"[工具执行异常] {type(e).__name__}: {e}"
+                else:
+                    tool_result = f"[未知工具] {func_name}"
+
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [tc],
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", f"call_{round_num}"),
+                    "content": str(tool_result)[:4000],
+                })
+
+        # Max tool rounds reached — force final output
+        messages.append({
+            "role": "user",
+            "content": "已达最大工具调用轮次。基于已获取的信息，输出最终 JSON 结果。",
+        })
+        try:
+            response = llm.invoke(messages)
+            raw_text = response.content if hasattr(response, "content") else str(response)
+            from app.agents.validator import validate_against_model
+            result = validate_against_model(raw_text, self.output_schema)
+            duration_ms = int((time.time() - start_time) * 1000)
+            return AgentResult(
+                agent_role=self.role, success=True, result=result.model_dump(),
+                invocation=AgentInvocation(
+                    agent_role=self.role, model=model_name,
+                    input_tokens=total_input, output_tokens=total_output,
+                    cost_usd=estimate_cost(model_name, total_input, total_output),
+                    duration_ms=duration_ms, retry_count=0,
+                ),
+                reasoning=f"{self.role.value} Agent 调用完成（达最大工具轮次）",
+            )
+        except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+            if self.FALLBACK_TO_MOCK_ON_ERROR:
+                fallback = self.mock_result(state)
+                fallback.reasoning = f"[FALLBACK] 工具调用后输出解析失败: {e}"
+                return fallback
+            return AgentResult(
+                agent_role=self.role, success=False,
+                error=f"工具调用后输出解析失败: {e}",
+                reasoning="调用失败", next_action="retry",
             )
 
 

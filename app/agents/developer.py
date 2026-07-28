@@ -15,12 +15,18 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 class DeveloperAgent(AgentBase):
 
+    ENABLE_TOOL_CALLING = True
+
     @property
     def role(self) -> AgentRole:
         return AgentRole.DEVELOPER
 
     def _load_system_prompt(self) -> str:
-        return (PROMPTS_DIR / "developer_agent.md").read_text("utf-8")
+        base = (PROMPTS_DIR / "developer_agent.md").read_text("utf-8")
+        tools_guide = PROMPTS_DIR / "developer_tools.md"
+        if tools_guide.exists():
+            base += "\n\n" + tools_guide.read_text("utf-8")
+        return base
 
     @property
     def output_schema(self):
