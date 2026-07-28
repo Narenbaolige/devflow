@@ -80,6 +80,13 @@ class TestTaskEndpoints:
         assert response.status_code == 200
         assert any(task["task_id"] == task_id for task in response.json()["tasks"])
 
+    def test_task_stats(self, client):
+        """统计接口应暴露状态分布、迭代、耗时与模型用量字段。"""
+        response = client.get("/tasks/stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert {"total_tasks", "phase_counts", "average_iterations", "total_cost_usd"} <= data.keys()
+
     def test_cancel_task(self, client):
         """取消任务应返回 200。"""
         create_resp = client.post("/tasks", json={

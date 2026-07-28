@@ -161,6 +161,7 @@ devflow/
 - [项目蓝图](docs/DevFlow-Project-Blueprint.md) — 完整项目设计与开发方案
 - [两周冲刺计划](docs/DevFlow-2Week-Sprint.md) — 高强度交付版 14 天计划
 - [架构文档](docs/architecture.md) — 技术架构与设计决策
+- [API 文档](docs/api.md) — 任务、审批、事件流与统计接口
 - [契约文档](contracts/) — P0 冻结的核心数据结构
 
 ## 许可证

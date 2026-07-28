@@ -126,6 +126,22 @@ class TaskListResponse(BaseModel):
     total: int
 
 
+class TaskStatsResponse(BaseModel):
+    """任务运行统计，数据来源为 Checkpointer 中的最新任务状态。"""
+    total_tasks: int
+    phase_counts: dict[str, int]
+    running_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    cancelled_tasks: int
+    awaiting_approval_tasks: int
+    average_iterations: float
+    average_duration_ms: float
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cost_usd: float
+
+
 def _to_response(state: dict) -> TaskResponse:
     """将 checkpoint 状态统一投影为 API 响应。"""
     meta = state["task_meta"]
@@ -144,6 +160,57 @@ def _to_response(state: dict) -> TaskResponse:
         deadline_at=state.get("deadline_at"),
         budget_limit_usd=state.get("budget_limit_usd"),
         budget_used_usd=state.get("budget_used_usd", 0.0),
+    )
+
+
+def _build_task_stats(states: list[dict]) -> TaskStatsResponse:
+    """从任务状态及 Agent 事件汇总统计数据。"""
+    phase_counts: dict[str, int] = {}
+    total_iterations = 0
+    durations: list[float] = []
+    input_tokens = output_tokens = 0
+    total_cost = 0.0
+
+    for state in states:
+        phase = state.get("phase", "unknown")
+        phase_counts[phase] = phase_counts.get(phase, 0) + 1
+        total_iterations += state.get("iteration", 0)
+        total_cost += float(state.get("budget_used_usd", 0.0) or 0.0)
+
+        created_at = state.get("task_meta", {}).get("created_at")
+        event_times = []
+        for event in state.get("events", []):
+            data = event.get("data") or {}
+            if event.get("event_type") == "agent_complete":
+                input_tokens += int(data.get("input_tokens", 0) or 0)
+                output_tokens += int(data.get("output_tokens", 0) or 0)
+            if event.get("timestamp"):
+                try:
+                    event_times.append(datetime.fromisoformat(event["timestamp"]))
+                except ValueError:
+                    pass
+        if created_at and event_times:
+            try:
+                duration = (max(event_times) - datetime.fromisoformat(created_at)).total_seconds() * 1000
+                durations.append(max(duration, 0.0))
+            except ValueError:
+                pass
+
+    total = len(states)
+    terminal = {"done", "failed", "cancelled"}
+    return TaskStatsResponse(
+        total_tasks=total,
+        phase_counts=phase_counts,
+        running_tasks=sum(count for phase, count in phase_counts.items() if phase not in terminal | {"awaiting_approval"}),
+        completed_tasks=phase_counts.get("done", 0),
+        failed_tasks=phase_counts.get("failed", 0),
+        cancelled_tasks=phase_counts.get("cancelled", 0),
+        awaiting_approval_tasks=phase_counts.get("awaiting_approval", 0),
+        average_iterations=round(total_iterations / total, 2) if total else 0.0,
+        average_duration_ms=round(sum(durations) / len(durations), 2) if durations else 0.0,
+        total_input_tokens=input_tokens,
+        total_output_tokens=output_tokens,
+        total_cost_usd=round(total_cost, 6),
     )
 
 
@@ -219,6 +286,12 @@ async def create_task(req: CreateTaskRequest):
         _run_task(task_id, initial_state, req.timeout_seconds), name=f"devflow-{task_id}"
     )
     return _to_response(initial_state)
+
+
+@router.get("/stats", response_model=TaskStatsResponse)
+async def get_task_stats():
+    """获取所有任务的状态、耗时、迭代与模型用量汇总。"""
+    return _build_task_stats(await _checkpoint_task_states())
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

@@ -59,6 +59,11 @@ CHECKPOINTER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devflow
 - 增加任务总超时、LLM 成本预算字段；在每个 Agent/沙箱节点边界强制停止超限任务。
 - 取消请求会取消后台图协程，并保留 `cancelled` 状态与事件。
 
+### 7. API 文档与统计
+
+- 新增 `docs/api.md`，涵盖任务生命周期、任务控制、事件流、统计和持久化配置。
+- 新增 `GET /tasks/stats`，从 Checkpointer 的任务状态汇总阶段、迭代、耗时、Token 和费用。
+
 ## 修改文件
 
 | 文件 | 说明 |
