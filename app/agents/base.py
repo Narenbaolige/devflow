@@ -406,7 +406,7 @@ class AgentBase(ABC):
 
                 messages.append({
                     "role": "assistant",
-                    "content": None,
+                    "content": "",
                     "tool_calls": [tc],
                 })
                 messages.append({

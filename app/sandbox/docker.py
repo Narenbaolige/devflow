@@ -17,7 +17,13 @@ import docker
 from docker.errors import DockerException
 
 from app.config import settings
-from app.sandbox.base import BaseSandbox, CommandResult
+from app.sandbox.base import (
+    BaseSandbox,
+    CommandResult,
+    _check_paths,
+    _log_execute,
+    _setup_logger,
+)
 
 
 class DockerSandbox(BaseSandbox):
@@ -40,10 +46,12 @@ class DockerSandbox(BaseSandbox):
         sandbox.cleanup()
     """
 
-    def __init__(self):
+    def __init__(self, log_dir: str | None = None):
         self._client: docker.DockerClient | None = None
         self._container_id: str | None = None
         self._execution_id: str | None = None
+        if log_dir:
+            _setup_logger(log_dir)
 
     @property
     def client(self) -> docker.DockerClient:
@@ -78,6 +86,9 @@ class DockerSandbox(BaseSandbox):
         # 相对路径 → 基于 /workspace 的绝对路径（Docker 要求绝对路径）
         resolved_cwd = cwd if cwd.startswith("/") else f"/workspace/{cwd}"
 
+        # 路径校验
+        warnings = _check_paths(command, "/workspace")
+
         try:
             container = self.client.containers.get(self._container_id)
             result = container.exec_run(
@@ -90,22 +101,37 @@ class DockerSandbox(BaseSandbox):
                 output = raw_output.decode("utf-8", errors="replace")
             else:
                 output = str(raw_output) if raw_output else ""
-            return CommandResult(
+
+            cmd_result = CommandResult(
                 exit_code=result.exit_code if result.exit_code is not None else -1,
                 stdout=output,
                 stderr="",
                 timed_out=(duration_ms >= timeout * 1000),
                 duration_ms=duration_ms,
+                warnings=warnings,
             )
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
-            return CommandResult(
+            cmd_result = CommandResult(
                 exit_code=-1,
                 stdout="",
                 stderr=f"容器执行异常: {str(e)}",
                 timed_out=False,
                 duration_ms=duration_ms,
+                warnings=warnings,
             )
+
+        # 结构化日志
+        _log_execute(
+            command, resolved_cwd, timeout,
+            cmd_result.exit_code, cmd_result.duration_ms, cmd_result.timed_out,
+            (cmd_result.stdout or cmd_result.stderr)[:120],
+            warnings=cmd_result.warnings,
+            backend="docker",
+            container_id=self._container_id,
+        )
+
+        return cmd_result
 
     def _create_container(self) -> str:
         """创建隔离容器。"""

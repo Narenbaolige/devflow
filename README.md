@@ -142,7 +142,6 @@ devflow/
 ├── frontend/               # React 前端
 ├── pyproject.toml
 ├── setup.py
-├── start.sh
 ├── .env.example
 └── .gitignore
 ```
