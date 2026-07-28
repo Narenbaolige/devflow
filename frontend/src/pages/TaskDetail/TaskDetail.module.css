@@ -1,0 +1,230 @@
+.container {
+  max-width: 100%;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  gap: 12px;
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #30363d;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.errorIcon { font-size: 48px; }
+.errorMsg { color: #8b949e; font-size: 14px; }
+
+.backBtn {
+  margin-top: 12px;
+  padding: 8px 20px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* ── 顶部栏 ── */
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.backLink {
+  background: none;
+  border: none;
+  color: #58a6ff;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+
+.backLink:hover { text-decoration: underline; }
+
+.taskId {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e6edf3;
+  font-family: monospace;
+}
+
+.cancelBtn {
+  margin-left: auto;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #f85149;
+  border-radius: 6px;
+  color: #f85149;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.5;
+}
+
+/* ── 统计卡片行 ── */
+.statsRow {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+/* ── 双栏布局 ── */
+.twoCol {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+}
+@media (max-width: 900px) {
+  .twoCol { grid-template-columns: 1fr; }
+}
+
+/* ── 左侧面板 ── */
+.leftPanel {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 20px;
+  height: fit-content;
+}
+
+.panelTitle {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.nodeList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 20px;
+}
+
+.nodeItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #8b949e;
+  transition: all 0.15s;
+}
+
+.nodeDone {
+  color: #e6edf3;
+}
+
+.nodeActive {
+  background: rgba(88, 166, 255, 0.08);
+  color: #58a6ff;
+}
+
+.nodeIcon {
+  width: 24px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.nodeLabel {
+  flex: 1;
+}
+
+.currentBadge {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── 错误 ── */
+.errorSection {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(248, 81, 73, 0.06);
+  border: 1px solid rgba(248, 81, 73, 0.2);
+  border-radius: 6px;
+}
+
+.errorSection h4 {
+  margin: 0 0 8px;
+  color: #f85149;
+  font-size: 13px;
+}
+
+.errorItem {
+  font-size: 12px;
+  color: #f85149;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(248, 81, 73, 0.1);
+}
+
+.errorItem strong {
+  font-family: monospace;
+}
+
+/* ── 右侧面板 ── */
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.successBox {
+  border-color: rgba(63, 185, 80, 0.4);
+  background: rgba(63, 185, 80, 0.05);
+}
+
+.successBox h3 {
+  color: #3fb950;
+  margin: 0 0 8px;
+}
+
+/* ── 空态 ── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 0;
+  color: #8b949e;
+}
+
+.emptyIcon { font-size: 40px; margin-bottom: 12px; }
+.emptyHint { font-size: 13px; color: #6e7681; }
