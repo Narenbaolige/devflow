@@ -169,20 +169,170 @@ async def apply_patches(state: TeamState) -> TeamState:
 
         # Step 2: 应用 patches
         if patches:
+            import json as _json
+            import tempfile as _tempfile
+            from pathlib import Path as _Path
             for i, patch in enumerate(patches):
                 result = patch if isinstance(patch, dict) else {}
                 diff = result.get("diff", "")
-                if not diff:
+                file_path = result.get("file_path", "")
+                orig_snippet = result.get("original_snippet", "")
+                patched_snippet = result.get("patched_snippet", "")
+
+                if not diff and not (orig_snippet and patched_snippet and file_path):
                     continue
-                import tempfile
-                from pathlib import Path
-                patch_file = Path(tempfile.gettempdir()) / f"devflow-patch-{task_id}-{i}.diff"
+
+                # 规范化 file_path：去除 LLM 可能返回的绝对路径，保留纯文件名
+                import ntpath
+                import posixpath
+                _sep = "\\" if "\\" in file_path else "/"
+                _raw_name = file_path.rsplit(_sep, 1)[-1] if _sep in file_path else file_path
+                # 去除盘符等前缀（如 D:/xxx/yy.py → yy.py）
+                if ":" in _raw_name:
+                    _raw_name = _raw_name.rsplit(":", 1)[-1]
+                file_path = _raw_name
+
+                applied = False
+
+                # Phase A: 尝试 git apply（严格模式，上下文必须精确匹配）
+                patch_file = _Path(_tempfile.gettempdir()) / f"devflow-patch-{task_id}-{i}.diff"
                 patch_file.write_text(diff, encoding="utf-8")
-                r = await _sandbox_call(sandbox, f"git apply {patch_file}", cwd="repo")
+                r = await _sandbox_call(sandbox, f"git apply --verbose {patch_file}", cwd="repo")
                 patch_file.unlink(missing_ok=True)
-                if r.exit_code != 0:
-                    _record_event(state, "error", f"Patch {i} 应用失败: {r.stderr or r.stdout[:200]}", "apply_patches")
-                    # 不中断流程 — 部分失败仍继续测试
+                if r.exit_code == 0:
+                    applied = True
+                    _record_event(state, "progress", f"Patch {i} ({file_path}) git apply 成功", "apply_patches")
+
+                # Phase B: git apply 失败 → 字符串替换（容忍上下文漂移）
+                if not applied and orig_snippet and patched_snippet and file_path:
+                    target = f"repo/{file_path}"
+                    # 将代码片段写入临时文件，避免 shell 转义问题
+                    orig_file = _Path(_tempfile.gettempdir()) / f"devflow-orig-{task_id}-{i}.txt"
+                    patch_file2 = _Path(_tempfile.gettempdir()) / f"devflow-patched-{task_id}-{i}.txt"
+                    apply_script = _Path(_tempfile.gettempdir()) / f"devflow-apply-{task_id}-{i}.py"
+
+                    orig_file.write_text(orig_snippet, encoding="utf-8")
+                    patch_file2.write_text(patched_snippet, encoding="utf-8")
+
+                    apply_script.write_text(f'''\
+import sys, re
+target = {_json.dumps(target)}
+orig_f = {_json.dumps(str(orig_file))}
+patch_f = {_json.dumps(str(patch_file2))}
+
+with open(orig_f, "r", encoding="utf-8") as f:
+    original = f.read()
+with open(patch_f, "r", encoding="utf-8") as f:
+    patched = f.read()
+
+try:
+    with open(target, "r", encoding="utf-8") as f:
+        content = f.read()
+except FileNotFoundError:
+    print("MISSING_FILE")
+    sys.exit(1)
+
+def write_and_exit(new_content, method):
+    with open(target, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print("OK_" + method)
+    sys.exit(0)
+
+# Phase 1: 精确字符串匹配
+if original in content:
+    write_and_exit(content.replace(original, patched, 1), "EXACT")
+
+# Phase 2: 按行模糊匹配（容忍 docstring 等中间行差异）
+orig_stripped = [l.strip() for l in original.split("\\n") if l.strip()]
+content_lines = content.split("\\n")
+orig_raw_lines = original.strip().split("\\n")
+
+# 用第一个有意义的原始行作为锚点
+anchor = orig_stripped[0] if orig_stripped else ""
+for line_idx, cl in enumerate(content_lines):
+    if cl.strip() != anchor:
+        continue
+    # 在文件中找到锚点，检查从此处开始的匹配度
+    matches = 0
+    content_pos = line_idx
+    for ol in orig_stripped:
+        # 跳过原始内容中在文件中不连续的行（容忍插入的 docstring/注释）
+        for _ in range(len(content_lines) - content_pos + 1):
+            if content_pos >= len(content_lines):
+                break
+            if content_lines[content_pos].strip() == ol:
+                matches += 1
+                content_pos += 1
+                break
+            content_pos += 1
+    if matches >= max(1, len(orig_stripped) * 0.6):
+        # 找到锚定位置，替换从锚点到匹配置信区间的内容
+        before = "\\n".join(content_lines[:line_idx])
+        after_start = content_pos
+        after = "\\n".join(content_lines[after_start:])
+        new_content = before + "\\n" + patched.strip() + "\\n" + after
+        while "\\n\\n\\n" in new_content:
+            new_content = new_content.replace("\\n\\n\\n", "\\n\\n")
+        write_and_exit(new_content, "FUZZY")
+
+# Phase 3: 函数级替换 — 通过函数名定位并替换整个函数体
+# 从 original_snippet 中提取第一个 def/class 行
+func_match = re.search(r'^(\\s*)(?:def|class)\\s+(\\w+)', original, re.MULTILINE)
+if func_match:
+    indent = func_match.group(1)
+    func_name = func_match.group(2)
+    # 在目标文件中查找同名函数/类定义
+    target_pattern = re.compile(
+        r'^(' + re.escape(indent) + r'(?:def|class)\\s+' + re.escape(func_name) + r'\\b.*)$',
+        re.MULTILINE
+    )
+    tm = target_pattern.search(content)
+    if tm:
+        func_start_line = content[:tm.start()].count("\\n")
+        lines = content.split("\\n")
+        # 找到函数结束位置（下一个同级 def/class 或 EOF）
+        end_line = len(lines)
+        for k in range(func_start_line + 1, len(lines)):
+            if re.match(r'^' + re.escape(indent) + r'(?:def|class)\\s+\\w+', lines[k]):
+                end_line = k
+                break
+            # 同级或更外层非空行（非缩进行）也结束
+            if lines[k] and not lines[k].startswith(" ") and not lines[k].startswith("\\t"):
+                if not lines[k].startswith(indent + " "):
+                    end_line = k
+                    break
+        before = "\\n".join(lines[:func_start_line])
+        after = "\\n".join(lines[end_line:])
+        new_content = before + "\\n" + patched.strip() + "\\n" + after
+        while "\\n\\n\\n" in new_content:
+            new_content = new_content.replace("\\n\\n\\n", "\\n\\n")
+        write_and_exit(new_content, "FUNCTION")
+
+print("NOT_FOUND")
+sys.exit(1)
+''', encoding="utf-8")
+
+                    r = await _sandbox_call(sandbox, f"python {apply_script}", timeout=30)
+                    # 清理临时文件
+                    orig_file.unlink(missing_ok=True)
+                    patch_file2.unlink(missing_ok=True)
+                    apply_script.unlink(missing_ok=True)
+
+                    if r.exit_code == 0:
+                        applied = True
+                        _record_event(state, "progress",
+                                      f"Patch {i} ({file_path}) 字符串替换成功 ({r.stdout.strip()})",
+                                      "apply_patches")
+                    else:
+                        _record_event(state, "error",
+                                      f"Patch {i} ({file_path}) 应用失败: git apply + 字符串替换均失败. "
+                                      f"stdout=[{r.stdout.strip()[:200]}] stderr=[{r.stderr.strip()[:200]}]",
+                                      "apply_patches")
+
+                if not applied:
+                    _record_event(state, "error",
+                                  f"Patch {i} 应用失败: 所有方法均未能应用",
+                                  "apply_patches")
 
         state["phase"] = "testing"
         _record_event(state, "node_complete", "仓库 clone 完成，patch 已应用", "apply_patches")
@@ -594,3 +744,53 @@ def build_graph(checkpointer=None):
 # =============================================================================
 
 graph = build_graph()
+
+
+# =============================================================================
+# Single Agent 图（用于消融实验基线）
+# =============================================================================
+
+async def run_single_agent(state: TeamState) -> TeamState:
+    """单 Agent 节点 → 调用 SingleAgent 完成全部工作 [P18]"""
+    if _blocked(state, "run_single_agent"):
+        return state
+    from app.agents import SingleAgent, agent_node
+
+    state["phase"] = "analyzing"
+    state = await agent_node(state, SingleAgent())
+    state["phase"] = "done"
+    _record_event(state, "node_complete", "Single Agent 全流程完成", "run_single_agent")
+    return state
+
+
+def build_single_agent_graph(checkpointer=None):
+    """
+    构建单 Agent 基线图（用于消融实验）。
+
+    流程：init_task → run_single_agent → finalize → END
+
+    与多 Agent Pipeline 对比，测量：
+      - 输出质量（patch 正确性、完整性）
+      - Token / 成本 / 耗时
+      - 首次尝试成功率
+    """
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+
+    builder = StateGraph(TeamState)
+    builder.add_node("init_task", init_task)
+    builder.add_node("run_single_agent", run_single_agent)
+    builder.add_node("handle_error", handle_error)
+    builder.add_node("finalize", finalize)
+
+    builder.set_entry_point("init_task")
+    builder.add_edge("init_task", "run_single_agent")
+    builder.add_conditional_edges(
+        "run_single_agent",
+        lambda state: "handle_error" if state.get("phase") == "failed" else "finalize",
+        {"finalize": "finalize", "handle_error": "handle_error"},
+    )
+    builder.add_edge("finalize", END)
+    builder.add_edge("handle_error", END)
+
+    return builder.compile(checkpointer=checkpointer)

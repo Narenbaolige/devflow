@@ -36,9 +36,11 @@
 ## 输出格式
 
 为每个修改的文件生成一个对象，包含：
-- file_path: 文件路径
-- original_snippet: 修改前的代码片段（足够的上下文）
-- patched_snippet: 修改后的代码片段
-- diff: unified diff 格式
+- file_path: **仅文件名或仓库内相对路径**（如 math_utils.py 或 src/math_utils.py），不要包含本地绝对路径或盘符
+- original_snippet: 修改前的代码片段（足够的上下文，需与原文件中的实际代码完全一致）
+- patched_snippet: 修改后的完整代码片段
+- diff: unified diff 格式（行号和上下文必须与原文件匹配）
 - change_description: 一句话描述
 - change_type: add / modify / delete / rename
+
+**重要**：original_snippet 必须从实际文件中逐字复制，diff 中的行号也会在应用时被校验。

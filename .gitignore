@@ -1,25 +1,39 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *.egg-info/
 dist/
 build/
 .venv/
 venv/
+*.egg
+
+# Testing / Coverage
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+*.cover
 
 # Environment
 .env
 .env.local
+.env.production
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-*
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Database
 *.db
@@ -32,6 +46,7 @@ Thumbs.db
 frontend/node_modules/
 frontend/dist/
 
-# Logs
-logs/
-*.log
+# Eval outputs
+results-*.csv
+eval_results/
+*.tmp

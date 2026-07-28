@@ -126,18 +126,28 @@ class AgentQualityEvaluator:
     # ------------------------------------------------------------------
 
     def _evaluate_output_quality(self, m: QualityMetrics, task, result):
-        """评估结构化输出的字段填充率。"""
+        """评估结构化输出的字段填充率。兼容多 Agent Pipeline 和 SingleAgent。"""
         ac = task.get("acceptance_criteria", [])
         m.total_required_fields = 1 + len(ac)  # summary + acceptance_criteria
         m.required_fields_filled = 0
 
-        # 检查 requirement_analysis（或 single_agent 结果）
+        # 检查 requirement_analysis（多 Agent Pipeline）
         req = result.get("requirement_analysis", {})
         req_result = req.get("result", {}) if isinstance(req, dict) else {}
-        if req_result.get("summary"):
+        summary = req_result.get("summary", "")
+        criteria = req_result.get("acceptance_criteria", [])
+
+        # 若无 requirement_analysis，检查 review（SingleAgent 输出在此字段）
+        if not summary:
+            review = result.get("review", {})
+            review_result = review.get("result", {}) if isinstance(review, dict) else {}
+            summary = review_result.get("summary", "")
+            criteria = review_result.get("acceptance_criteria", [])
+
+        if summary:
             m.required_fields_filled += 1
-        if req_result.get("acceptance_criteria"):
-            m.required_fields_filled += len(req_result["acceptance_criteria"])
+        if criteria:
+            m.required_fields_filled += len(criteria)
 
         m.structured_output_valid = m.required_fields_filled > 0
         m.output_completeness = (
@@ -145,8 +155,14 @@ class AgentQualityEvaluator:
         )
 
     def _evaluate_patches(self, m: QualityMetrics, result):
-        """评估生成的 patch 质量。"""
+        """评估生成的 patch 质量。兼容多 Agent Pipeline 和 SingleAgent。"""
         patches = result.get("patches", []) or []
+        # SingleAgent 的 patches 藏在 review.result.patches 中
+        if not patches:
+            review = result.get("review", {}) or {}
+            review_result = review.get("result", {}) or {}
+            patches = review_result.get("patches", []) or []
+
         m.patch_count = len(patches)
         m.patch_applicable = False
         m.diff_lines = 0
@@ -172,12 +188,15 @@ class AgentQualityEvaluator:
             )
 
     def _evaluate_review(self, m: QualityMetrics, result):
-        """从 review 字段提取审查结果。"""
+        """从 review 字段提取审查结果。兼容多 Agent Pipeline 和 SingleAgent。"""
         review = result.get("review", {}) or {}
         r = review.get("result", {}) or {}
-        m.review_passed = r.get("passed", False)
+        # 多 Agent Pipeline 使用 passed；SingleAgent 使用 self_review_passed
+        m.review_passed = r.get("passed", r.get("self_review_passed", False))
         m.review_risk_level = r.get("risk_level", "unknown")
-        m.review_issue_count = len(r.get("issues", []) or [])
+        # SingleAgent 使用 self_review_issues
+        issues = r.get("issues", r.get("self_review_issues", [])) or []
+        m.review_issue_count = len(issues)
 
     def _evaluate_tokens(self, m: QualityMetrics, result):
         """从 events 中累加各 Agent 的 Token 消耗。"""
