@@ -735,7 +735,7 @@ async def finalize(state: TeamState) -> TeamState:
 # 条件路由
 # =============================================================================
 
-AnalyzeRoute = Literal["plan_solution", "await_approval", "handle_error"]
+AnalyzeRoute = Literal["setup_workspace", "await_approval", "handle_error"]
 
 
 def route_after_analyze(state: TeamState) -> AnalyzeRoute:
@@ -748,7 +748,7 @@ def route_after_analyze(state: TeamState) -> AnalyzeRoute:
     result = req.get("result", {})
     if result.get("confidence", 0) < 0.6:
         return "await_approval"
-    return "plan_solution"
+    return "setup_workspace"
 
 
 def route_after_apply(state: TeamState) -> Literal["run_tests", "handle_error"]:
@@ -774,11 +774,11 @@ def route_after_test(state: TeamState) -> Literal["review_code", "develop_change
     return "develop_changes"
 
 
-def route_after_setup(state: TeamState) -> Literal["develop_changes", "handle_error"]:
-    """工作区准备后的路由。"""
+def route_after_setup(state: TeamState) -> Literal["plan_solution", "handle_error"]:
+    """工作区准备后的路由 — repo 已 clone，进入方案规划。"""
     if state.get("phase") == "failed" or state.get("cancel_requested"):
         return "handle_error"
-    return "develop_changes"
+    return "plan_solution"
 
 
 ReviewRoute = Literal["security_check", "develop_changes", "handle_error"]
@@ -855,17 +855,13 @@ def build_graph(checkpointer=None):
         "analyze_requirement",
         route_after_analyze,
         {
-            "plan_solution": "plan_solution",
+            "setup_workspace": "setup_workspace",
             "await_approval": "await_approval",
             "handle_error": "handle_error",
         },
     )
-    builder.add_edge("plan_solution", "setup_workspace")
-    builder.add_conditional_edges(
-        "setup_workspace",
-        route_after_setup,
-        {"develop_changes": "develop_changes", "handle_error": "handle_error"},
-    )
+    builder.add_edge("setup_workspace", "plan_solution")
+    builder.add_edge("plan_solution", "develop_changes")
     builder.add_edge("develop_changes", "apply_patches")
     builder.add_conditional_edges(
         "apply_patches",

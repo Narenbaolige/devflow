@@ -46,7 +46,6 @@ export default function TaskCreate() {
         max_iterations: maxIterations,
         timeout_seconds: timeoutSeconds,
         budget_limit_usd: budgetLimit ? parseFloat(budgetLimit) : undefined,
-        publish_to_remote: true,
       });
       navigate(`/tasks/${task.task_id}`);
     } catch (err) {
