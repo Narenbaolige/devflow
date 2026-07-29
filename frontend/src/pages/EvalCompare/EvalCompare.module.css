@@ -74,6 +74,14 @@
   color: #58a6ff;
 }
 
+/* ── 图表容器 ── */
+.chartBox {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 16px;
+}
+
 /* ── 发现 ── */
 .findings {
   display: flex;

@@ -12,15 +12,31 @@ import type {
 
 const API_BASE = "/tasks";
 
+// ── 结构化错误 ──
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 // ── 通用 fetch 封装 ──
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+  } catch {
+    throw new ApiError("网络连接失败，请检查后端服务是否启动", 0);
+  }
+
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(body || `请求失败: ${res.status} ${res.statusText}`);
+    const body = await res.text().catch(() => "");
+    throw new ApiError(body || `请求失败: ${res.status} ${res.statusText}`, res.status);
   }
   return res.json();
 }
