@@ -223,7 +223,6 @@ async def apply_patches(state: TeamState) -> TeamState:
     from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox
 
     task_id = state["task_meta"]["task_id"]
-    meta = state["task_meta"]
     patches = state.get("patches") or []
 
     try:
