@@ -6,14 +6,14 @@
 
 ## 项目状态
 
-| 项目 | 状态 |
-|------|------|
-| **两周冲刺** | Day 6 / 14 |
-| **测试** | 310 tests，全部通过 |
-| **4 Agent** | Requirement / Planner / Developer / Reviewer，支持 DeepSeek 真实调用 |
-| **工作流** | 11 节点 LangGraph StateGraph + 5 条件路由 + 返工循环（≤3 次） |
-| **沙箱** | Local 模式（默认，零依赖）/ Docker 模式（可选隔离） |
-| **Checkpointer** | Memory（默认）/ PostgreSQL（可选，支持重启恢复） |
+| 项目                   | 状态                                                                 |
+| ---------------------- | -------------------------------------------------------------------- |
+| **两周冲刺**     | Day 6 / 14                                                           |
+| **测试**         | 310 tests，全部通过                                                  |
+| **4 Agent**      | Requirement / Planner / Developer / Reviewer，支持 DeepSeek 真实调用 |
+| **工作流**       | 11 节点 LangGraph StateGraph + 5 条件路由 + 返工循环（≤3 次）       |
+| **沙箱**         | Local 模式（默认，零依赖）/ Docker 模式（可选隔离）                  |
+| **Checkpointer** | Memory（默认）/ PostgreSQL（可选，支持重启恢复）                     |
 
 ### Mock 模式
 
@@ -29,11 +29,11 @@ DEVFLOW_USE_MOCK=false   # 真实 LLM + 真实沙箱
 
 ## 前置要求
 
-| 依赖 | 最低版本 | 说明 |
-|------|:--:|------|
-| **Python** | 3.11+ | `python --version` |
-| **Git** | 2.30+ | `git --version` |
-| **LLM API Key** | — | Mock 模式下不需要；真实模式需 DeepSeek / OpenAI / ChatAnywhere |
+| 依赖                  | 最低版本 | 说明                                                           |
+| --------------------- | :------: | -------------------------------------------------------------- |
+| **Python**      |  3.11+  | `python --version`                                           |
+| **Git**         |  2.30+  | `git --version`                                              |
+| **LLM API Key** |    —    | Mock 模式下不需要；真实模式需 DeepSeek / OpenAI / ChatAnywhere |
 
 > **默认无需 Docker。** 沙箱使用本地 subprocess 执行。如需隔离，安装 Docker Desktop 并设置 `SANDBOX_MODE=docker`。
 
@@ -148,12 +148,12 @@ devflow/
 
 ## 团队
 
-| 角色 | 负责人 | 核心模块 |
-|------|:--:|------|
-| 系统架构与 LangGraph | A | Workflow、API、State、Checkpoint、审批流程 |
-| Agent 与 Prompt | B | 4 Agent、Tools、Prompt、LLM、结构化输出 |
-| 执行环境与可靠性 | C | Sandbox、pytest、Patch 应用、安全策略 |
-| 前端与系统评测 | D | React UI、事件展示、Benchmark、实验分析 |
+| 角色                 | 负责人 | 核心模块                                   |
+| -------------------- | :----: | ------------------------------------------ |
+| 系统架构与 LangGraph |   A   | Workflow、API、State、Checkpoint、审批流程 |
+| Agent 与 Prompt      |   B   | 4 Agent、Tools、Prompt、LLM、结构化输出    |
+| 执行环境与可靠性     |   C   | Sandbox、pytest、Patch 应用、安全策略      |
+| 前端与系统评测       |   D   | React UI、事件展示、Benchmark、实验分析    |
 
 ## 文档
 
