@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTaskPolling } from "../../hooks/useTaskPolling";
 import { useTaskSSE } from "../../hooks/useTaskSSE";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import { useToast } from "../../components/Toast/ToastContext";
 import { cancelTask } from "../../services/api";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
 import StatsCard from "../../components/StatsCard/StatsCard";
@@ -16,8 +18,10 @@ import styles from "./TaskDetail.module.css";
 export default function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
-  const { task, loading, error } = useTaskPolling(taskId);
+  const { task, loading, error, refetch } = useTaskPolling(taskId);
   const { events } = useTaskSSE(taskId);
+  const online = useNetworkStatus();
+  const { error: showError, success: showSuccess } = useToast();
   const [cancelling, setCancelling] = useState(false);
 
   const handleCancel = async () => {
@@ -25,12 +29,24 @@ export default function TaskDetail() {
     setCancelling(true);
     try {
       await cancelTask(taskId);
-    } catch {
-      // ignore
+      showSuccess("任务已取消");
+    } catch (err) {
+      showError("取消失败", err instanceof Error ? err.message : "未知错误");
     } finally {
       setCancelling(false);
     }
   };
+
+  // ── 离线提示 ──
+  if (!online) {
+    return (
+      <div className={styles.center}>
+        <div className={styles.errorIcon}>🔌</div>
+        <h2>网络已断开</h2>
+        <p className={styles.errorMsg}>请检查网络连接后刷新页面</p>
+      </div>
+    );
+  }
 
   // ── 加载态 ──
   if (loading) {
@@ -49,9 +65,14 @@ export default function TaskDetail() {
         <div className={styles.errorIcon}>⚠️</div>
         <h2>无法加载任务</h2>
         <p className={styles.errorMsg}>{error || "任务不存在"}</p>
-        <button className={styles.backBtn} onClick={() => navigate("/")}>
-          返回创建页
-        </button>
+        <div className={styles.retryRow}>
+          <button className={styles.backBtn} onClick={() => navigate("/")}>
+            返回创建页
+          </button>
+          <button className={styles.retryBtn} onClick={refetch}>
+            🔄 重试
+          </button>
+        </div>
       </div>
     );
   }

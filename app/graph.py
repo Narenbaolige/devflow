@@ -405,6 +405,10 @@ async def run_tests(state: TeamState) -> TeamState:
     if _blocked(state, "run_tests"):
         return state
 
+    import sys
+    _PY = sys.executable
+    _PIP = f'"{_PY}" -m pip'
+
     if _USE_MOCK_SANDBOX:
         from contracts.sandbox_result import SandboxResult, TestSummary
         state["sandbox_results"].append(
@@ -436,21 +440,21 @@ async def run_tests(state: TeamState) -> TeamState:
         sandbox = get_sandbox(task_id)
 
         # 安装依赖：先尝试 pip install -e .，失败则检查 requirements.txt
-        r = await _sandbox_call(sandbox, "pip install -q -e .", cwd="repo", timeout=180)
+        r = await _sandbox_call(sandbox, f"{_PIP} install -q -e .", cwd="repo", timeout=180)
         if r.exit_code != 0:
             # 检查 requirements.txt 是否存在
             check = await _sandbox_call(
                 sandbox,
-                "python -c \"import os; exit(0 if os.path.exists('requirements.txt') else 1)\"",
+                f'{_PY} -c "import os; exit(0 if os.path.exists(\'requirements.txt\') else 1)"',
                 cwd="repo",
             )
             if check.exit_code == 0:
-                await _sandbox_call(sandbox, "pip install -q -r requirements.txt", cwd="repo", timeout=180)
+                await _sandbox_call(sandbox, f"{_PIP} install -q -r requirements.txt", cwd="repo", timeout=180)
 
         # 运行 pytest
         import time
         start = time.time()
-        r = await _sandbox_call(sandbox, "python -m pytest --tb=short -v 2>&1", cwd="repo", timeout=300)
+        r = await _sandbox_call(sandbox, f"{_PY} -m pytest --tb=short -v", cwd="repo", timeout=300)
         duration_ms = int((time.time() - start) * 1000)
 
         # 解析输出
