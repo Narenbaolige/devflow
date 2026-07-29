@@ -715,17 +715,10 @@ async def finalize(state: TeamState) -> TeamState:
             state["phase"] = "done"
             _record_event(state, "task_complete", "任务已完成", "finalize")
     except Exception as exc:
-        state["phase"] = "failed"
-        state["publication"] = {"status": "failed", "error": str(exc)}
-        state.setdefault("errors", []).append({
-            "node": "finalize",
-            "error_type": "sandbox_error",
-            "message": f"远程仓库推送失败: {exc}",
-            "timestamp": datetime.now().isoformat(),
-            "recoverable": False,
-            "retry_count": state.get("iteration", 0),
-        })
-        _record_event(state, "error", f"远程仓库推送失败: {str(exc)[:120]}", "finalize")
+        # 推送失败不应阻断任务——核心工作（分析/开发/测试）已经完成
+        state["phase"] = "done" if not state.get("cancel_requested") else state["phase"]
+        state["publication"] = {"status": "skipped", "error": str(exc)}
+        _record_event(state, "progress", f"跳过远程推送（{str(exc)[:100]}）— 核心任务已完成", "finalize")
     finally:
         cleanup_sandbox(task_id)
     return state

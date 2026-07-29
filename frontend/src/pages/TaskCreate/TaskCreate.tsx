@@ -6,7 +6,7 @@ import type { TaskResponse } from "../../types/task";
 import styles from "./TaskCreate.module.css";
 
 const DEFAULT_VALUES = {
-  repo_url: "https://github.com/example/demo-repo",
+  repo_url: "https://github.com/Narenbaolige/devflow-test-repo",
   branch: "main",
   max_iterations: 3,
   timeout_seconds: 900,
