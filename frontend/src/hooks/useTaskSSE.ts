@@ -58,7 +58,8 @@ export function useTaskSSE(taskId: string | undefined) {
     // 注册常见事件类型
     const eventTypes = [
       "progress", "node_start", "node_complete",
-      "agent_thinking", "tool_call", "tool_result",
+      "agent_thinking", "agent_complete", "agent_fallback",
+      "tool_call", "tool_result",
       "patch_generated", "test_result",
       "approval_required", "error", "task_complete",
     ];

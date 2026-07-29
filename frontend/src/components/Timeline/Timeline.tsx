@@ -10,6 +10,7 @@ const EVENT_CONFIG: Record<string, { label: string; color: string }> = {
   node_complete:       { label: "完成",   color: "#3fb950" },
   agent_thinking:      { label: "推理",   color: "#bc8cff" },
   agent_complete:      { label: "Agent",  color: "#3fb950" },
+  agent_fallback:      { label: "降级",   color: "#d29922" },
   tool_call:           { label: "工具",   color: "#d29922" },
   tool_result:         { label: "结果",   color: "#d29922" },
   patch_generated:     { label: "Patch",  color: "#f0883e" },

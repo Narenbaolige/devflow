@@ -12,7 +12,8 @@ export type Phase =
 // ── 事件类型 ──
 export type EventType =
   | "node_start" | "node_complete"
-  | "agent_thinking" | "tool_call" | "tool_result"
+  | "agent_thinking" | "agent_complete" | "agent_fallback"
+  | "tool_call" | "tool_result"
   | "patch_generated" | "test_result"
   | "approval_required" | "error" | "progress" | "task_complete";
 
