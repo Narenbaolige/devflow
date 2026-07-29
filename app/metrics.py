@@ -13,11 +13,23 @@ from pydantic import BaseModel
 # =============================================================================
 
 PRICING: dict[str, dict[str, float]] = {
+    # OpenAI / ChatAnywhere 中转
     "gpt-4o-mini":        {"input": 0.15, "output": 0.60},
     "gpt-4o":             {"input": 2.50, "output": 10.00},
+    "gpt-4-turbo":        {"input": 10.00, "output": 30.00},
+    "gpt-3.5-turbo":      {"input": 0.50, "output": 1.50},
+    "chatanywhere":       {"input": 0.00, "output": 0.00},
+    # DeepSeek
     "deepseek-chat":      {"input": 0.14, "output": 0.28},
     "deepseek-reasoner":  {"input": 0.55, "output": 2.19},
-    "chatanywhere":       {"input": 0.00, "output": 0.00},   # 免费中转
+    # Anthropic Claude
+    "claude-haiku":       {"input": 0.80, "output": 4.00},
+    "claude-sonnet":      {"input": 3.00, "output": 15.00},
+    "claude-opus":        {"input": 15.00, "output": 75.00},
+    # Google Gemini
+    "gemini-flash":       {"input": 0.075, "output": 0.30},
+    "gemini-pro":         {"input": 1.25, "output": 5.00},
+    # Fallback
     "unknown":            {"input": 0.00, "output": 0.00},
 }
 

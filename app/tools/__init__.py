@@ -1,4 +1,8 @@
-"""工具系统模块 — 注册表 + 可调用实现。"""
+"""工具系统模块 — 注册表 + 可调用实现。
+
+工具执行通过 tool_impls.TOOL_IMPL_MAP 进行分发，该映射由
+base._invoke_with_tools() 使用。
+"""
 
 from app.tools.file_ops import (
     ToolResult,
@@ -13,23 +17,8 @@ from app.tools.registry import TOOL_REGISTRY, ToolDefinition, ToolPermission
 from app.tools.sandbox_ops import sandbox_execute
 from app.tools.search import grep
 
-# 工具执行映射：将注册表名称映射到可调用函数
-TOOL_EXECUTORS = {
-    "read_file": read_file,
-    "write_file": write_file,
-    "edit_file": edit_file,
-    "list_dir": list_dir,
-    "glob": glob,
-    "grep": grep,
-    "sandbox_execute": sandbox_execute,
-    # 向后兼容别名
-    "execute_test": sandbox_execute,
-    "execute_command": sandbox_execute,
-}
-
 __all__ = [
     "TOOL_REGISTRY",
-    "TOOL_EXECUTORS",
     "ToolDefinition",
     "ToolPermission",
     "ToolResult",

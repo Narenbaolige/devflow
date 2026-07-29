@@ -174,7 +174,7 @@ EVAL_TASKS = [
             "原有 API 行为不变",
             "常量使用有意义的命名",
         ],
-        "expected_files": ["constants.py", "api/routes.py"],
+        "expected_files": ["constants.py", "routes.py"],
     },
     {
         "id": "task-017",

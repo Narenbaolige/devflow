@@ -341,13 +341,19 @@ class AgentBase(ABC):
 
         total_input = 0
         total_output = 0
+        validation_retries = 0
         model_name = getattr(llm, "model", "unknown")
 
         for round_num in range(self.MAX_TOOL_ROUNDS):
             try:
                 response = llm.invoke(messages, tools=tool_defs)
-            except Exception:
-                # If tool calling not supported by LLM, fall back to prompt-only
+            except Exception as exc:
+                import logging
+                _log = logging.getLogger("devflow.agent")
+                _log.warning(
+                    "工具调用模式失败: %s: %s，降级到纯提示词模式",
+                    type(exc).__name__, str(exc)[:200],
+                )
                 return self._invoke_prompt_only(state, llm)
 
             # Track tokens
@@ -373,12 +379,13 @@ class AgentBase(ABC):
                             agent_role=self.role, model=model_name,
                             input_tokens=total_input, output_tokens=total_output,
                             cost_usd=estimate_cost(model_name, total_input, total_output),
-                            duration_ms=duration_ms, retry_count=0,
+                            duration_ms=duration_ms, retry_count=validation_retries,
                         ),
                         reasoning=f"{self.role.value} Agent 调用完成（{round_num}轮工具调用）",
                     )
                 except Exception:
                     # Output wasn't valid JSON → ask LLM to fix
+                    validation_retries += 1
                     messages.append({
                         "role": "user",
                         "content": "输出不是有效的 JSON，请严格按照 JSON Schema 格式输出。",
@@ -407,7 +414,7 @@ class AgentBase(ABC):
 
                 messages.append({
                     "role": "assistant",
-                    "content": "",
+                    "content": getattr(response, "content", "") or "",
                     "tool_calls": [tc],
                 })
                 messages.append({
@@ -433,7 +440,7 @@ class AgentBase(ABC):
                     agent_role=self.role, model=model_name,
                     input_tokens=total_input, output_tokens=total_output,
                     cost_usd=estimate_cost(model_name, total_input, total_output),
-                    duration_ms=duration_ms, retry_count=0,
+                    duration_ms=duration_ms, retry_count=validation_retries,
                 ),
                 reasoning=f"{self.role.value} Agent 调用完成（达最大工具轮次）",
             )

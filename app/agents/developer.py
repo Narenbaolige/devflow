@@ -57,25 +57,40 @@ class DeveloperAgent(AgentBase):
         return context
 
     def mock_result(self, state: TeamState) -> AgentResult:
+        """返回 Mock 结果。
+
+        正常 Mock 模式（USE_MOCK=True）下，返回 success=True 用于开发调试。
+        LLM 失败回退时，reasoning 会被基类覆写为 [FALLBACK] 前缀，
+        下游可通过 success 字段判断 patch 是否可信任。
+        """
         return AgentResult(
             agent_role=AgentRole.DEVELOPER,
             success=True,
             result=PatchResult(
-                file_path="src/main.py",
-                original_snippet="# TODO: 添加参数校验",
+                file_path="math_utils.py",
+                original_snippet="def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)",
                 patched_snippet=(
-                    "def validated_input(value):\n"
-                    '    if not isinstance(value, (int, float)):\n'
-                    '        raise TypeError(f"Expected number, got {type(value)}")\n'
-                    "    return value"
+                    "def factorial(n):\n"
+                    "    if not isinstance(n, int):\n"
+                    "        raise TypeError('Input must be an integer')\n"
+                    "    if n < 0:\n"
+                    "        raise ValueError('Input must be non-negative')\n"
+                    "    if n == 0:\n"
+                    "        return 1\n"
+                    "    return n * factorial(n - 1)"
                 ),
                 diff=(
-                    "@@ -1,1 +1,4 @@\n"
-                    "-# TODO: 添加参数校验\n"
-                    "+def validated_input(value):\n"
-                    '+    if not isinstance(value, (int, float)):\n'
-                    '+        raise TypeError(f"Expected number, got {type(value)}")\n'
-                    "+    return value"
+                    "--- a/math_utils.py\n"
+                    "+++ b/math_utils.py\n"
+                    "@@ -1,4 +1,8 @@\n"
+                    " def factorial(n):\n"
+                    "+    if not isinstance(n, int):\n"
+                    "+        raise TypeError('Input must be an integer')\n"
+                    "+    if n < 0:\n"
+                    "+        raise ValueError('Input must be non-negative')\n"
+                    "     if n == 0:\n"
+                    "         return 1\n"
+                    "     return n * factorial(n - 1)"
                 ),
                 change_description="Mock: 为目标函数添加参数类型校验",
                 change_type="modify",

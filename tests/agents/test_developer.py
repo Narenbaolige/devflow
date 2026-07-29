@@ -58,7 +58,7 @@ class TestDeveloperAgent:
             task_id="t-001", repo_url="x", branch="main", requirement="x",
         )
         result = agent.mock_result(state)
-        assert result.result["diff"].startswith("@@")
+        assert "@@" in result.result["diff"]
 
     def test_mock_result_change_type_valid(self):
         """change_type 必须是合法的枚举值。"""
@@ -89,7 +89,7 @@ class TestDeveloperAgent:
         result = agent.invoke(state)
         assert result.success is True
         assert result.agent_role == AgentRole.DEVELOPER
-        assert result.result.get("diff", "").startswith("@@")
+        assert "@@" in result.result.get("diff", "")
 
     # ------------------------------------------------------------------
     # 上下文构建

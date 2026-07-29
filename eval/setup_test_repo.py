@@ -440,6 +440,191 @@ class TestFileHandler:
         finally:
             path.unlink(missing_ok=True)
 ''',
+
+    # ── test_user: simple_fix (task-002 修复 import 路径) ──
+    "test_user.py": '''\
+"""Test for User model. Task-002: fix the import path below."""
+from models import User  # Bug: should be from app.models import User
+
+
+def test_user_creation():
+    user = User("alice", "alice@example.com")
+    assert user.name == "alice"
+    assert user.email == "alice@example.com"
+
+
+def test_user_str():
+    user = User("bob", "bob@example.com")
+    assert str(user) == "User(bob)"
+''',
+
+    "models.py": '''\
+"""User model — simple dataclass for task-002."""
+
+
+class User:
+    def __init__(self, name: str, email: str):
+        self.name = name
+        self.email = email
+
+    def __repr__(self):
+        return f"User({self.name})"
+''',
+
+    # ── utils: simple_fix (task-012 修复 typo) ──
+    "utils.py": '''\
+"""Utility functions for DevFlow testing."""
+
+
+def calculate_values(a: int, b: int) -> dict:
+    """Return calculated values. Contains an intentional typo."""
+    return {
+        "sum": a + b,
+        "product": a * b,
+        "calulated_value": a * b * 2,  # Bug: typo, should be 'calculated_value'
+    }
+
+
+def format_result(data: dict) -> str:
+    """Format a result dictionary as a string."""
+    return ", ".join(f"{k}={v}" for k, v in data.items())
+''',
+
+    "test_utils.py": '''\
+"""Tests for utils.py — task-012."""
+from utils import calculate_values, format_result
+
+
+class TestCalculateValues:
+    def test_returns_sum_and_product(self):
+        r = calculate_values(3, 4)
+        assert r["sum"] == 7
+        assert r["product"] == 12
+
+    def test_has_correct_key_name(self):
+        r = calculate_values(2, 5)
+        # Should be 'calculated_value', not 'calulated_value'
+        assert "calculated_value" in r
+        assert r["calculated_value"] == 20
+
+
+class TestFormatResult:
+    def test_format(self):
+        assert format_result({"a": 1, "b": 2}) == "a=1, b=2"
+''',
+
+    # ── constants + routes: refactor (task-016 提取硬编码字符串) ──
+    "constants.py": '''\
+"""Application constants."""
+
+# All hardcoded values should be defined here
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+API_VERSION = "v1"
+''',
+
+    "routes.py": '''\
+"""Routes module — task-016: extract hardcoded strings to constants.py."""
+
+from constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, API_VERSION
+
+
+def build_pagination_url(base: str, page: int, size: int = DEFAULT_PAGE_SIZE) -> str:
+    """Build a paginated API URL."""
+    size = min(size, MAX_PAGE_SIZE)
+    return f"/api/{API_VERSION}/{base}?page={page}&size={size}"
+''',
+
+    "test_routes.py": '''\
+"""Tests for routes.py — task-016."""
+from routes import build_pagination_url
+
+
+class TestBuildPaginationURL:
+    def test_default_page_size(self):
+        url = build_pagination_url("users", 1)
+        assert "size=20" in url
+        assert "/api/v1/users" in url
+
+    def test_caps_at_max(self):
+        url = build_pagination_url("items", 1, size=500)
+        assert "size=100" in url
+
+    def test_custom_valid_size(self):
+        url = build_pagination_url("posts", 2, size=50)
+        assert "page=2" in url
+        assert "size=50" in url
+''',
+
+    # ── data_pipeline: refactor (task-018 拆分 run() 方法) ──
+    "data_pipeline.py": '''\
+"""Data pipeline for DevFlow testing. Task-018: refactor the run() method."""
+
+
+class DataPipeline:
+    def __init__(self, source: list):
+        self.source = source
+        self.extracted: list = []
+        self.transformed: list = []
+        self.loaded: list = []
+
+    def extract(self):
+        """Extract data from source."""
+        self.extracted = [x for x in self.source if x is not None]
+
+    def transform(self):
+        """Transform extracted data."""
+        self.transformed = [x * 2 for x in self.extracted]
+
+    def load(self):
+        """Load transformed data."""
+        self.loaded = list(self.transformed)
+
+    def run(self):
+        """Run the full pipeline — too many responsibilities in one method."""
+        # Extract
+        self.extracted = [x for x in self.source if x is not None]
+        # Transform
+        self.transformed = [x * 2 for x in self.extracted]
+        # Load
+        self.loaded = list(self.transformed)
+        # Log
+        print(f"Pipeline complete: {len(self.loaded)} items loaded")
+        return self.loaded
+''',
+
+    "test_data_pipeline.py": '''\
+"""Tests for data_pipeline.py — task-018."""
+from data_pipeline import DataPipeline
+
+
+class TestDataPipeline:
+    def test_extract_filters_none(self):
+        p = DataPipeline([1, None, 2, None, 3])
+        p.extract()
+        assert p.extracted == [1, 2, 3]
+
+    def test_transform_doubles(self):
+        p = DataPipeline([1, 2, 3])
+        p.extract()
+        p.transform()
+        assert p.transformed == [2, 4, 6]
+
+    def test_load_copies(self):
+        p = DataPipeline([1, 2])
+        p.extract()
+        p.transform()
+        p.load()
+        assert p.loaded == [2, 4]
+
+    def test_run_uses_individual_methods(self):
+        """run() should delegate to extract/transform/load, not duplicate logic."""
+        import inspect
+        source = inspect.getsource(DataPipeline.run)
+        # Should call self.extract/transform/load rather than inlining everything
+        assert "self.extract()" in source or "self.transform()" in source
+''',
+
 }
 
 

@@ -15,6 +15,8 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 class PlannerAgent(AgentBase):
 
+    ENABLE_TOOL_CALLING = True
+
     @property
     def role(self) -> AgentRole:
         return AgentRole.PLANNER
