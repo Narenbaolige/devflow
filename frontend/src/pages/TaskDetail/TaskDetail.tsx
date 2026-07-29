@@ -192,15 +192,15 @@ export default function TaskDetail() {
             </div>
           )}
 
-          {/* 已完成 */}
-          {task.publication && (
-            <div className={`${styles.section} ${task.publication.status === "pushed" ? styles.successBox : styles.publishError}`}>
-              <h3>{task.publication.status === "pushed" ? "已推送到远程仓库" : "远程发布失败"}</h3>
+          {/* 远程发布（仅成功时显示） */}
+          {task.publication && task.publication.status === "pushed" && (
+            <div className={`${styles.section} ${styles.successBox}`}>
+              <h3>已推送到远程仓库</h3>
               {Boolean(task.publication.branch) && <p>分支：{String(task.publication.branch)}</p>}
-              {Boolean(task.publication.error) && <p>{String(task.publication.error)}</p>}
             </div>
           )}
 
+          {/* 任务完成 */}
           {task.phase === "done" && (
             <div className={`${styles.section} ${styles.successBox}`}>
               <h3>✅ 任务完成</h3>
