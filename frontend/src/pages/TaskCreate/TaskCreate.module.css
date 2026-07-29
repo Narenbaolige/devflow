@@ -149,3 +149,64 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── 最近任务 ── */
+.recentSection {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid #30363d;
+}
+
+.recentSection h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: #e6edf3;
+}
+
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recentItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #161b22;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.recentItem:hover {
+  border-color: #30363d;
+  background: #1c2128;
+}
+
+.recentId {
+  font-family: monospace;
+  font-size: 13px;
+  color: #58a6ff;
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.recentReq {
+  flex: 1;
+  font-size: 13px;
+  color: #c9d1d9;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentTime {
+  font-size: 12px;
+  color: #484f58;
+  white-space: nowrap;
+}
