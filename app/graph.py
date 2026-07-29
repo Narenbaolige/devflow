@@ -121,13 +121,83 @@ async def plan_solution(state: TeamState) -> TeamState:
     return state
 
 
+async def setup_workspace(state: TeamState) -> TeamState:
+    """工作区准备节点 → 在沙箱中 clone 目标仓库 [B/C]
+
+    在 Developer Agent 运行之前 clone 仓库，使 Developer 可以通过
+    工具调用（read_file / list_dir / grep）探索真实代码结构，
+    生成精确的文件路径和代码片段。
+    """
+    if _blocked(state, "setup_workspace"):
+        return state
+
+    if _USE_MOCK_SANDBOX:
+        state["phase"] = "developing"
+        _record_event(state, "node_complete", "工作区准备完成 (Mock)", "setup_workspace")
+        return state
+
+    from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox
+
+    task_id = state["task_meta"]["task_id"]
+    meta = state["task_meta"]
+
+    try:
+        sandbox = get_sandbox(task_id)
+
+        # 检查是否已 clone（同一任务多次迭代时复用）
+        exists = await _sandbox_call(
+            sandbox,
+            "python -c \"import os; raise SystemExit(0 if os.path.isdir('repo/.git') else 1)\"",
+        )
+        if exists.exit_code == 0:
+            _record_event(state, "progress", "仓库已存在，跳过 clone", "setup_workspace")
+        else:
+            r = await _sandbox_call(
+                sandbox,
+                f"git clone --depth 1 --branch {meta['branch']} {meta['repo_url']} repo",
+                timeout=120,
+            )
+            if r.exit_code != 0:
+                fallback = await _sandbox_call(
+                    sandbox,
+                    f"git clone --depth 1 {meta['repo_url']} repo",
+                    timeout=120,
+                )
+                if fallback.exit_code == 0:
+                    r = fallback
+                    _record_event(
+                        state, "progress",
+                        f"分支 {meta['branch']} 不存在，已改用远程默认分支",
+                        "setup_workspace",
+                    )
+            if r.exit_code != 0:
+                _record_event(state, "error", f"git clone 失败: {r.stderr or r.stdout[:200]}", "setup_workspace")
+                cleanup_sandbox(task_id)
+                state["phase"] = "failed"
+                return state
+
+        state["phase"] = "developing"
+        _record_event(state, "node_complete", "工作区准备完成，仓库已 clone", "setup_workspace")
+    except asyncio.CancelledError:
+        state["phase"] = "cancelled"
+        raise
+    except Exception as exc:
+        _record_event(state, "error", f"setup_workspace 异常: {exc}", "setup_workspace")
+        state["phase"] = "failed"
+
+    return state
+
+
 async def develop_changes(state: TeamState) -> TeamState:
-    """代码开发节点 → 调用 Developer Agent [B]"""
+    """代码开发节点 → 调用 Developer Agent [B]
+
+    Developer Agent 可通过工具调用（tool_read_file / tool_list_dir / tool_grep）
+    探索沙箱中的真实仓库代码，生成精确的 patch。
+    """
     if _blocked(state, "develop_changes"):
         return state
     from app.agents import DeveloperAgent, agent_node
 
-    # 在节点中计数迭代（不在条件路由中修改 state，LangGraph 才会持久化）
     state["phase"] = "developing"
     state = await agent_node(state, DeveloperAgent())
     state["iteration"] = state.get("iteration", 0) + 1
@@ -139,8 +209,8 @@ async def develop_changes(state: TeamState) -> TeamState:
 async def apply_patches(state: TeamState) -> TeamState:
     """应用 Patch 节点 → 沙箱操作 [C]
 
-    使用沙箱 clone 目标仓库并应用 Developer Agent 生成的 patch。
-    同一任务的沙箱实例会被后续 run_tests 节点复用。
+    将 Developer Agent 生成的 patch 应用到沙箱中已 clone 的仓库。
+    仓库已在 setup_workspace 中 clone，此处只负责 patch 应用。
     """
     if _blocked(state, "apply_patches"):
         return state
@@ -159,41 +229,17 @@ async def apply_patches(state: TeamState) -> TeamState:
     try:
         sandbox = get_sandbox(task_id)
 
-        # Clone once, then preserve the checkout through validation and publish.
+        # 确认仓库存在（应由 setup_workspace 完成）
         exists = await _sandbox_call(
             sandbox,
             "python -c \"import os; raise SystemExit(0 if os.path.isdir('repo/.git') else 1)\"",
         )
         if exists.exit_code != 0:
-            r = await _sandbox_call(
-                sandbox,
-                f"git clone --depth 1 --branch {meta['branch']} {meta['repo_url']} repo",
-                timeout=120,
-            )
-            if r.exit_code != 0:
-                # Repositories commonly use master, trunk, or another default
-                # branch.  When the requested branch is absent, let Git select
-                # the remote's default branch instead of failing the task.
-                fallback = await _sandbox_call(
-                    sandbox,
-                    f"git clone --depth 1 {meta['repo_url']} repo",
-                    timeout=120,
-                )
-                if fallback.exit_code == 0:
-                    r = fallback
-                    _record_event(
-                        state,
-                        "progress",
-                        f"分支 {meta['branch']} 不存在，已改用远程默认分支",
-                        "apply_patches",
-                    )
-            if r.exit_code != 0:
-                _record_event(state, "error", f"git clone 失败: {r.stderr or r.stdout[:200]}", "apply_patches")
-                cleanup_sandbox(task_id)
-                state["phase"] = "failed"
-                return state
+            _record_event(state, "error", "仓库未 clone，请检查 setup_workspace", "apply_patches")
+            state["phase"] = "failed"
+            return state
 
-        # Step 2: 应用 patches
+        # 应用 patches
         unapplied_patches = 0
         if patches:
             import json as _json
@@ -729,6 +775,13 @@ def route_after_test(state: TeamState) -> Literal["review_code", "develop_change
     return "develop_changes"
 
 
+def route_after_setup(state: TeamState) -> Literal["develop_changes", "handle_error"]:
+    """工作区准备后的路由。"""
+    if state.get("phase") == "failed" or state.get("cancel_requested"):
+        return "handle_error"
+    return "develop_changes"
+
+
 ReviewRoute = Literal["security_check", "develop_changes", "handle_error"]
 
 
@@ -784,6 +837,7 @@ def build_graph(checkpointer=None):
     builder.add_node("init_task", init_task)
     builder.add_node("analyze_requirement", analyze_requirement)
     builder.add_node("plan_solution", plan_solution)
+    builder.add_node("setup_workspace", setup_workspace)
     builder.add_node("develop_changes", develop_changes)
     builder.add_node("apply_patches", apply_patches)
     builder.add_node("run_tests", run_tests)
@@ -807,7 +861,12 @@ def build_graph(checkpointer=None):
             "handle_error": "handle_error",
         },
     )
-    builder.add_edge("plan_solution", "develop_changes")
+    builder.add_edge("plan_solution", "setup_workspace")
+    builder.add_conditional_edges(
+        "setup_workspace",
+        route_after_setup,
+        {"develop_changes": "develop_changes", "handle_error": "handle_error"},
+    )
     builder.add_edge("develop_changes", "apply_patches")
     builder.add_conditional_edges(
         "apply_patches",

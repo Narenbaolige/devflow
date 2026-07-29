@@ -14,6 +14,7 @@ EXPECTED_NODES = {
     "init_task",
     "analyze_requirement",
     "plan_solution",
+    "setup_workspace",
     "develop_changes",
     "apply_patches",
     "run_tests",
@@ -33,8 +34,8 @@ EXPECTED_NODES = {
 class TestBuildGraph:
     """验证 StateGraph 的节点注册和编译配置。"""
 
-    def test_all_11_nodes_registered(self):
-        """build_graph 应注册全部 11 个工作流节点。"""
+    def test_all_12_nodes_registered(self):
+        """build_graph 应注册全部 12 个工作流节点。"""
         from app.graph import build_graph
         graph = build_graph()
         nodes = set(graph.get_graph().nodes.keys())
