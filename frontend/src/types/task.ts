@@ -200,6 +200,7 @@ export interface CreateTaskRequest {
   max_iterations?: number;
   timeout_seconds?: number;
   budget_limit_usd?: number | null;
+  publish_to_remote?: boolean;
 }
 
 export interface ApproveRequest {
@@ -222,6 +223,7 @@ export interface TaskResponse {
   deadline_at: string | null;
   budget_limit_usd: number | null;
   budget_used_usd: number;
+  publication: Record<string, unknown> | null;
 }
 
 export interface TaskListResponse {

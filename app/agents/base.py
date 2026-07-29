@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from app.llm.factory import get_llm
 from app.metrics import estimate_cost
+from app.config import settings
 from contracts.agent_result import AgentInvocation, AgentResult, AgentRole
 from contracts.state import TeamState
 
@@ -468,7 +469,24 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
 
     # LLM 调用是同步 SDK 操作；放在线程中避免阻塞 API 事件循环，
     # 使取消、状态查询等请求仍可被处理。
-    result = await asyncio.to_thread(agent.invoke, state)
+    started_at = time.monotonic()
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(agent.invoke, state),
+            timeout=settings.AGENT_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        # A blocking SDK call may still finish in its worker thread, but it can
+        # no longer hold the workflow hostage.  Preserve the existing fallback
+        # policy so downstream nodes receive a valid, visible result.
+        result = agent.mock_result(state)
+        result.reasoning = "[FALLBACK] Agent 调用超时，已降级为 Mock 输出"
+        result.invocation = AgentInvocation(
+            agent_role=agent.role,
+            model="mock-fallback",
+            retry_count=1,
+            duration_ms=int((time.monotonic() - started_at) * 1000),
+        )
 
     # ── P3: 调用后检查 — 调用期间被取消则不写入产出物 ──
     if state.get("cancel_requested"):

@@ -74,6 +74,11 @@ def _blocked(state: TeamState, node_name: str) -> bool:
     return _cancelled(state, node_name) or _limits_exceeded(state, node_name)
 
 
+def _publish_branch(task_id: str) -> str:
+    """Return the dedicated remote branch for a task's verified changes."""
+    return f"devflow/{task_id}"
+
+
 async def _sandbox_call(sandbox, command: str, *, cwd: str = "/workspace", timeout: int = 60):
     """在独立线程中调用沙箱命令，避免阻塞事件循环。"""
     return await asyncio.to_thread(sandbox.execute, command, cwd=cwd, timeout=timeout)
@@ -155,19 +160,42 @@ async def apply_patches(state: TeamState) -> TeamState:
     try:
         sandbox = get_sandbox(task_id)
 
-        # Step 1: clone 仓库
-        r = await _sandbox_call(
+        # Clone once, then preserve the checkout through validation and publish.
+        exists = await _sandbox_call(
             sandbox,
-            f"git clone --depth 1 --branch {meta['branch']} {meta['repo_url']} repo",
-            timeout=120,
+            "python -c \"import os; raise SystemExit(0 if os.path.isdir('repo/.git') else 1)\"",
         )
-        if r.exit_code != 0:
-            _record_event(state, "error", f"git clone 失败: {r.stderr or r.stdout[:200]}", "apply_patches")
-            cleanup_sandbox(task_id)
-            state["phase"] = "failed"
-            return state
+        if exists.exit_code != 0:
+            r = await _sandbox_call(
+                sandbox,
+                f"git clone --depth 1 --branch {meta['branch']} {meta['repo_url']} repo",
+                timeout=120,
+            )
+            if r.exit_code != 0:
+                # Repositories commonly use master, trunk, or another default
+                # branch.  When the requested branch is absent, let Git select
+                # the remote's default branch instead of failing the task.
+                fallback = await _sandbox_call(
+                    sandbox,
+                    f"git clone --depth 1 {meta['repo_url']} repo",
+                    timeout=120,
+                )
+                if fallback.exit_code == 0:
+                    r = fallback
+                    _record_event(
+                        state,
+                        "progress",
+                        f"分支 {meta['branch']} 不存在，已改用远程默认分支",
+                        "apply_patches",
+                    )
+            if r.exit_code != 0:
+                _record_event(state, "error", f"git clone 失败: {r.stderr or r.stdout[:200]}", "apply_patches")
+                cleanup_sandbox(task_id)
+                state["phase"] = "failed"
+                return state
 
         # Step 2: 应用 patches
+        unapplied_patches = 0
         if patches:
             import json as _json
             import tempfile as _tempfile
@@ -215,7 +243,7 @@ async def apply_patches(state: TeamState) -> TeamState:
                     patch_file2.write_text(patched_snippet, encoding="utf-8")
 
                     apply_script.write_text(f'''\
-import sys, re
+import os, sys, re
 target = {_json.dumps(target)}
 orig_f = {_json.dumps(str(orig_file))}
 patch_f = {_json.dumps(str(patch_file2))}
@@ -229,6 +257,16 @@ try:
     with open(target, "r", encoding="utf-8") as f:
         content = f.read()
 except FileNotFoundError:
+    # Empty repositories and feature requests may legitimately introduce a
+    # brand-new file.  In that case the patched content is the initial file.
+    if patched.strip():
+        parent = os.path.dirname(target)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(patched)
+        print("OK_CREATE")
+        sys.exit(0)
     print("MISSING_FILE")
     sys.exit(1)
 
@@ -330,9 +368,20 @@ sys.exit(1)
                                       "apply_patches")
 
                 if not applied:
+                    unapplied_patches += 1
                     _record_event(state, "error",
                                   f"Patch {i} 应用失败: 所有方法均未能应用",
                                   "apply_patches")
+
+        if unapplied_patches:
+            state["phase"] = "failed"
+            _record_event(
+                state,
+                "error",
+                f"{unapplied_patches} 个补丁未能应用，已停止测试",
+                "apply_patches",
+            )
+            return state
 
         state["phase"] = "testing"
         _record_event(state, "node_complete", "仓库 clone 完成，patch 已应用", "apply_patches")
@@ -376,7 +425,7 @@ async def run_tests(state: TeamState) -> TeamState:
         _record_event(state, "test_result", "测试执行完成 (Mock)", "run_tests")
         return state
 
-    from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox
+    from app.tools.sandbox_ops import get_sandbox
     from contracts.sandbox_result import SandboxResult, TestSummary, TestFailure
 
     task_id = state["task_meta"]["task_id"]
@@ -427,11 +476,12 @@ async def run_tests(state: TeamState) -> TeamState:
                 is_new_failure=True,
             ).model_dump())
 
+        no_tests_found = r.exit_code == 5 and passed == failed == errors == 0
         result = SandboxResult(
             execution_id=execution_id,
             task_id=task_id,
             sandbox_type="test",
-            status="success" if r.exit_code == 0 else "failure",
+            status="success" if r.exit_code in {0, 5} and not r.timed_out else "failure",
             exit_code=r.exit_code,
             timed_out=r.timed_out,
             duration_ms=duration_ms,
@@ -467,9 +517,6 @@ async def run_tests(state: TeamState) -> TeamState:
         )
         state["phase"] = "reviewing"
         _record_event(state, "error", f"run_tests 异常: {e}", "run_tests")
-    finally:
-        cleanup_sandbox(task_id)
-
     return state
 
 
@@ -579,14 +626,61 @@ async def handle_error(state: TeamState) -> TeamState:
         state["iteration"] = state.get("iteration", 0) + 1
         state["phase"] = "developing"  # 返工
     _record_event(state, "error", f"工作流错误 ({recent_node}): {last_error_msg[:80]}", "handle_error")
+    if state["phase"] == "failed":
+        from app.tools.sandbox_ops import cleanup_sandbox
+        cleanup_sandbox(state["task_meta"]["task_id"])
     return state
 
 
 async def finalize(state: TeamState) -> TeamState:
     """完成节点 → 汇总结果 [A]"""
-    if not state.get("cancel_requested", False):
-        state["phase"] = "done"
-        _record_event(state, "task_complete", "任务已完成", "finalize")
+    from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox
+
+    task_id = state["task_meta"]["task_id"]
+    try:
+        if state["task_meta"].get("publish_to_remote", False) and not state.get("cancel_requested", False):
+            sandbox = get_sandbox(task_id)
+            branch = _publish_branch(task_id)
+            status = await _sandbox_call(sandbox, "git status --porcelain", cwd="repo")
+            if status.exit_code != 0 or not status.stdout.strip():
+                raise RuntimeError("没有可发布的代码变更")
+
+            for command in (
+                f"git switch -c {branch}",
+                "git config user.name \"DevFlow Bot\"",
+                "git config user.email \"devflow@localhost\"",
+                "git add -A",
+                f"git commit -m \"DevFlow verified changes ({task_id})\"",
+                f"git push -u origin {branch}",
+            ):
+                result = await _sandbox_call(sandbox, command, cwd="repo", timeout=120)
+                if result.exit_code != 0:
+                    raise RuntimeError(result.stderr or result.stdout or f"命令失败: {command}")
+
+            state["publication"] = {
+                "status": "pushed",
+                "branch": branch,
+                "repository": state["task_meta"]["repo_url"],
+            }
+            _record_event(state, "progress", f"已推送验证通过的修改到分支 {branch}", "finalize")
+
+        if not state.get("cancel_requested", False):
+            state["phase"] = "done"
+            _record_event(state, "task_complete", "任务已完成", "finalize")
+    except Exception as exc:
+        state["phase"] = "failed"
+        state["publication"] = {"status": "failed", "error": str(exc)}
+        state.setdefault("errors", []).append({
+            "node": "finalize",
+            "error_type": "sandbox_error",
+            "message": f"远程仓库推送失败: {exc}",
+            "timestamp": datetime.now().isoformat(),
+            "recoverable": False,
+            "retry_count": state.get("iteration", 0),
+        })
+        _record_event(state, "error", f"远程仓库推送失败: {str(exc)[:120]}", "finalize")
+    finally:
+        cleanup_sandbox(task_id)
     return state
 
 
@@ -608,6 +702,13 @@ def route_after_analyze(state: TeamState) -> AnalyzeRoute:
     if result.get("confidence", 0) < 0.6:
         return "await_approval"
     return "plan_solution"
+
+
+def route_after_apply(state: TeamState) -> Literal["run_tests", "handle_error"]:
+    """Never run tests when cloning or patch application has already failed."""
+    if state.get("phase") == "failed" or state.get("cancel_requested"):
+        return "handle_error"
+    return "run_tests"
 
 
 def route_after_test(state: TeamState) -> Literal["review_code", "develop_changes", "handle_error"]:
@@ -706,7 +807,11 @@ def build_graph(checkpointer=None):
     )
     builder.add_edge("plan_solution", "develop_changes")
     builder.add_edge("develop_changes", "apply_patches")
-    builder.add_edge("apply_patches", "run_tests")
+    builder.add_conditional_edges(
+        "apply_patches",
+        route_after_apply,
+        {"run_tests": "run_tests", "handle_error": "handle_error"},
+    )
 
     builder.add_conditional_edges(
         "run_tests",

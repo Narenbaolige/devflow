@@ -8,14 +8,16 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ── 后端 ──
 Write-Host "[1/2] Starting backend (port 8000)..." -ForegroundColor Yellow
-$backendCmd = "cd '$root'; .\.venv\Scripts\python.exe -m app.run"
+$backendCmd = "cd '$root'; .\.venv312\Scripts\python.exe -m app.run"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
 Write-Host "       Backend  launched in new window." -ForegroundColor Green
 
 # ── 前端 ──
 Write-Host "[2/2] Starting frontend (port 5173)..." -ForegroundColor Yellow
 if (Test-Path "$root\frontend\node_modules") {
-    $frontendCmd = "cd '$root\frontend'; npm run dev"
+    # Use npm.cmd so this also works when PowerShell's script execution policy
+    # blocks the npm.ps1 shim.
+    $frontendCmd = "cd '$root\frontend'; npm.cmd run dev"
     Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendCmd
     Write-Host "       Frontend launched in new window." -ForegroundColor Green
 } else {

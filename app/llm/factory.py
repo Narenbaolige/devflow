@@ -26,6 +26,7 @@ def get_llm():
     return create_llm(
         provider=settings.LLM_PROVIDER,
         model=settings.get_model_name(),
+        timeout=settings.AGENT_TIMEOUT_SECONDS,
     )
 
 

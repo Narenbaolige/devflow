@@ -24,6 +24,7 @@ class TaskMeta(TypedDict):
     branch: str
     requirement: str                 # 用户原始需求描述
     created_at: str                  # ISO 8601
+    publish_to_remote: bool
 
 
 class ErrorRecord(TypedDict):
@@ -97,6 +98,7 @@ class TeamState(TypedDict):
 
     # ========== 沙箱层 [C] ==========
     sandbox_results: Annotated[list[dict], "append"]
+    publication: dict | None
 
 
 # =============================================================================
@@ -124,6 +126,7 @@ def create_initial_state(
     max_iterations: int = 3,
     execution_timeout_seconds: int | None = None,
     budget_limit_usd: float | None = None,
+    publish_to_remote: bool = False,
 ) -> TeamState:
     """创建初始 TeamState。"""
     return TeamState(
@@ -133,6 +136,7 @@ def create_initial_state(
             branch=branch,
             requirement=requirement,
             created_at=datetime.now().isoformat(),
+            publish_to_remote=publish_to_remote,
         ),
         phase="init",
         iteration=0,
@@ -156,4 +160,5 @@ def create_initial_state(
         review=None,
         security_review=None,
         sandbox_results=[],
+        publication=None,
     )

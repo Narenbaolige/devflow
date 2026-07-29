@@ -217,6 +217,13 @@
   margin: 0 0 8px;
 }
 
+.publishError {
+  border-color: rgba(248, 81, 73, 0.4);
+  background: rgba(248, 81, 73, 0.05);
+}
+
+.publishError h3 { color: #f85149; }
+
 /* ── 空态 ── */
 .emptyState {
   display: flex;

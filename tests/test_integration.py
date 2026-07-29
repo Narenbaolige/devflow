@@ -192,6 +192,20 @@ class TestRoutingAfterAnalyze:
         assert route_after_analyze(s) == "handle_error"
 
 
+class TestRoutingAfterApply:
+    def test_failed_apply_skips_tests(self):
+        from app.graph import route_after_apply
+
+        state = _state(phase="failed")
+        assert route_after_apply(state) == "handle_error"
+
+    def test_successful_apply_runs_tests(self):
+        from app.graph import route_after_apply
+
+        state = _state(phase="testing")
+        assert route_after_apply(state) == "run_tests"
+
+
 class TestRoutingAfterTest:
     """route_after_test — 测试后的路由。"""
 

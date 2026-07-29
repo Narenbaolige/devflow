@@ -95,6 +95,7 @@ class CreateTaskRequest(BaseModel):
     budget_limit_usd: float | None = Field(
         default=None, ge=0, description="LLM 成本上限（美元）；不传则使用全局配置"
     )
+    publish_to_remote: bool = Field(default=False)
 
 
 class TaskResponse(BaseModel):
@@ -113,6 +114,7 @@ class TaskResponse(BaseModel):
     deadline_at: str | None = None
     budget_limit_usd: float | None = None
     budget_used_usd: float = 0.0
+    publication: dict | None = None
 
 
 class ApproveRequest(BaseModel):
@@ -160,6 +162,7 @@ def _to_response(state: dict) -> TaskResponse:
         deadline_at=state.get("deadline_at"),
         budget_limit_usd=state.get("budget_limit_usd"),
         budget_used_usd=state.get("budget_used_usd", 0.0),
+        publication=state.get("publication"),
     )
 
 
@@ -270,6 +273,7 @@ async def create_task(req: CreateTaskRequest):
         max_iterations=req.max_iterations,
         execution_timeout_seconds=req.timeout_seconds,
         budget_limit_usd=budget_limit,
+        publish_to_remote=req.publish_to_remote,
     )
     initial_state["events"].append({
         "event_id": str(uuid.uuid4()),
