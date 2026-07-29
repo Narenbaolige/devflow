@@ -14,9 +14,9 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.config import settings
 from app.llm.factory import get_llm
 from app.metrics import estimate_cost
-from app.config import settings
 from contracts.agent_result import AgentInvocation, AgentResult, AgentRole
 from contracts.state import TeamState
 
@@ -475,7 +475,7 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
             asyncio.to_thread(agent.invoke, state),
             timeout=settings.AGENT_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # A blocking SDK call may still finish in its worker thread, but it can
         # no longer hold the workflow hostage.  Preserve the existing fallback
         # policy so downstream nodes receive a valid, visible result.

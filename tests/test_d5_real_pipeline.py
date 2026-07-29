@@ -32,8 +32,8 @@ os.environ["DEVFLOW_USE_MOCK"] = "false"
 os.environ["DEVFLOW_USE_SANDBOX"] = "false"
 
 # 现在导入 — base.py 和 graph.py 会读取新的环境变量值
-from app.graph import build_graph, _USE_MOCK_SANDBOX
 from app.agents.base import AgentBase
+from app.graph import _USE_MOCK_SANDBOX, build_graph
 from contracts.state import create_initial_state
 
 
@@ -180,10 +180,10 @@ async def run_d5_pipeline():
         tests_passed = ts.get("failed", 0) == 0 and ts.get("passed", 0) > 0
         if not tests_passed:
             success = False
-            print(f"\n  ⚠️  管道完成但测试未全部通过")
+            print("\n  ⚠️  管道完成但测试未全部通过")
 
     if success:
-        print(f"\n  🎉 D5 里程碑达成！真实管道端到端成功")
+        print("\n  🎉 D5 里程碑达成！真实管道端到端成功")
     else:
         print(f"\n  ⚠️  D5 里程碑未达成 (phase={phase})")
 

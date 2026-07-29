@@ -20,8 +20,8 @@ if sys.platform == "win32":
 
 load_dotenv(override=True)
 
-from app.api.tasks import router as tasks_router  # noqa: E402
 from app import graph as workflow  # noqa: E402
+from app.api.tasks import router as tasks_router  # noqa: E402
 from app.checkpoint import managed_checkpointer  # noqa: E402
 from app.config import settings  # noqa: E402
 

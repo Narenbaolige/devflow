@@ -1,6 +1,7 @@
 """工具注册表测试。"""
 
 import pytest
+
 from app.tools.registry import TOOL_REGISTRY, ToolDefinition, ToolPermission, get_tools_for_agent
 
 VALID_AGENTS = {"requirement", "planner", "developer", "reviewer", "security"}

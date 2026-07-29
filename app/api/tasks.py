@@ -13,8 +13,8 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -204,7 +204,10 @@ def _build_task_stats(states: list[dict]) -> TaskStatsResponse:
     return TaskStatsResponse(
         total_tasks=total,
         phase_counts=phase_counts,
-        running_tasks=sum(count for phase, count in phase_counts.items() if phase not in terminal | {"awaiting_approval"}),
+        running_tasks=sum(
+            count for phase, count in phase_counts.items()
+            if phase not in terminal | {"awaiting_approval"}
+        ),
         completed_tasks=phase_counts.get("done", 0),
         failed_tasks=phase_counts.get("failed", 0),
         cancelled_tasks=phase_counts.get("cancelled", 0),
@@ -225,7 +228,7 @@ async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> 
             workflow.graph.ainvoke(initial_state, config), timeout=timeout_seconds
         )
         _tasks_store[task_id] = result
-    except asyncio.TimeoutError:
+    except TimeoutError:
         state = await _checkpoint_state(task_id) or initial_state
         state["phase"] = "failed"
         state.setdefault("errors", []).append({

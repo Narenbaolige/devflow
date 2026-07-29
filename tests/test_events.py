@@ -7,12 +7,8 @@ agent_node() 中 P4 新增的 agent_complete / agent_fallback 事件。
 
 import json
 import uuid
-from datetime import datetime
-from unittest.mock import patch
 
-import pytest
-from contracts.state import create_initial_state, TeamState
-
+from contracts.state import TeamState, create_initial_state
 
 # =============================================================================
 # _record_event 单元测试
@@ -123,8 +119,9 @@ class TestAgentCompleteEvent:
 
     def test_no_agent_complete_in_mock_mode(self):
         """Mock 模式下 invocation=None，不产生 agent_complete 事件。"""
-        from app.agents import RequirementAgent, agent_node
         import asyncio
+
+        from app.agents import RequirementAgent, agent_node
 
         async def _run():
             state = self._make_state()
@@ -145,14 +142,16 @@ class TestAgentCompleteEvent:
         此处以 RequirementAgent 为例，临时切换 USE_MOCK=False 验证。
         可能因网络/API key 问题而降级，但至少验证逻辑路径可达。
         """
+        import asyncio
+        import os
+
         from app.agents import RequirementAgent, agent_node
         from app.agents.base import AgentBase
-        import asyncio, os
 
         async def _run():
             state = self._make_state()
             original_mock = AgentBase.USE_MOCK
-            old_key = os.environ.get("DEEPSEEK_API_KEY")
+            _old_key = os.environ.get("DEEPSEEK_API_KEY")
 
             # 无 key 时 fallback → invocation 有 mock-fallback model 但 cost_usd=0
             # 有 key 时真实调用 → invocation 有真实 model 和 cost
@@ -193,8 +192,9 @@ class TestCancelSkipsAgentEvents:
 
     def test_cancel_requested_before_call_skips_agent(self):
         """cancel_requested=True 时 agent_node 直接返回，不产生事件。"""
-        from app.agents import RequirementAgent, agent_node
         import asyncio
+
+        from app.agents import RequirementAgent, agent_node
 
         async def _run():
             state = self._make_state()
@@ -241,7 +241,7 @@ class TestEventSSECompatibility:
 
     def test_event_type_values_are_known(self):
         """所有事件类型应属于已知集合，避免前端无法渲染。"""
-        KNOWN_TYPES = {
+        known_types = {
             "progress", "node_complete", "test_result", "error",
             "task_complete", "agent_complete", "agent_fallback",
             "approval_required",
@@ -250,10 +250,10 @@ class TestEventSSECompatibility:
         state = create_initial_state(
             task_id="sse-002", repo_url="x", branch="main", requirement="x",
         )
-        for etype in KNOWN_TYPES:
+        for etype in known_types:
             state["events"] = []
             _record_event(state, etype, "test", "test_node")
-            assert state["events"][-1]["event_type"] in KNOWN_TYPES
+            assert state["events"][-1]["event_type"] in known_types
 
     def test_message_field_never_empty(self):
         """message 字段不应为空——前端直接展示此文本。"""
@@ -281,8 +281,9 @@ class TestAgentFallbackEvent:
 
     def test_fallback_event_not_created_on_normal_success(self):
         """Mock 模式成功调用不产生 agent_fallback 事件。"""
-        from app.agents import RequirementAgent, agent_node
         import asyncio
+
+        from app.agents import RequirementAgent, agent_node
 
         async def _run():
             state = self._make_state()
@@ -300,9 +301,11 @@ class TestAgentFallbackEvent:
         临时清除 API key 并切换 USE_MOCK=False，触发 LLM 调用失败，
         验证 agent_node 产生 agent_fallback 事件。
         """
+        import asyncio
+        import os
+
         from app.agents import RequirementAgent, agent_node
         from app.agents.base import AgentBase
-        import asyncio, os
 
         async def _run():
             state = self._make_state()

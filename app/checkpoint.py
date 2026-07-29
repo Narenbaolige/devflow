@@ -4,8 +4,8 @@
 进程恢复。这里保持可选导入，避免本地开发在未安装 PostgreSQL 驱动时无法启动。
 """
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from langgraph.checkpoint.memory import MemorySaver
 

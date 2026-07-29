@@ -14,10 +14,9 @@ import csv
 import os
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 _project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(_project_root))
@@ -133,7 +132,7 @@ class RealSandboxComparator:
             r.rework_helped = r.ma_success and r.ma_iterations > 1
 
             if r.ma_fixed_sa_failed:
-                print(f"  >>> Multi-agent FIXED what SingleAgent could not!")
+                print("  >>> Multi-agent FIXED what SingleAgent could not!")
             elif r.rework_helped:
                 print(f"  >>> Rework loop helped (iter={r.ma_iterations})")
 
@@ -211,8 +210,8 @@ class RealSandboxComparator:
 
     async def _apply_and_test(self, task_id: str, pipeline_result: dict, time_sec: float) -> dict:
         """对于 SingleAgent 结果，在真实沙箱中 apply patch + run pytest。"""
-        from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox
         from app.graph import _sandbox_call
+        from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox
 
         sandbox = None
         try:
@@ -238,7 +237,7 @@ class RealSandboxComparator:
             # Apply patches
             import json as _json
             import tempfile as _tempfile
-            _Path = type(Path())
+            _Path = type(Path())  # noqa: N806
             for i, p in enumerate(patches):
                 pdict = p if isinstance(p, dict) else {}
                 diff = pdict.get("diff", "")
@@ -398,7 +397,7 @@ else:
         elif ma_ok == sa_ok:
             print(f"  VERDICT: Both approaches tied at {ma_ok}/{total}")
         else:
-            print(f"  VERDICT: SingleAgent outperformed — investigate why")
+            print("  VERDICT: SingleAgent outperformed — investigate why")
         print()
 
 

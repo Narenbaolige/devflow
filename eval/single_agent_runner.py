@@ -201,7 +201,7 @@ def main():
 
     runner = SingleAgentEvalRunner(mode=args.mode, output=args.output)
 
-    records = asyncio.run(runner.run_all(tasks=tasks, repo_url=args.repo))
+    _records = asyncio.run(runner.run_all(tasks=tasks, repo_url=args.repo))
     runner.export_csv()
     runner.print_summary()
 

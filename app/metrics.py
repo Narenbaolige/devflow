@@ -6,7 +6,7 @@ Token 使用统计与费用估算。
   - 各 Provider 的费用估算
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # =============================================================================
 # 模型定价表（USD / 1M tokens）

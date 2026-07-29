@@ -421,6 +421,7 @@ class TestApprovalReworkFlow:
     def test_security_check_critical_routes_to_await_approval(self):
         """Reviewer 发现 critical issue → security_check 设置 approval_required。"""
         import asyncio
+
         from app.graph import security_check
 
         s = _state(review=_high_risk_review_result())
@@ -434,6 +435,7 @@ class TestApprovalReworkFlow:
     def test_security_check_low_risk_skips_approval(self):
         """低风险审查不触发审批，直接完成。"""
         import asyncio
+
         from app.graph import security_check
 
         s = _state(review=_review_result(passed=True))
@@ -444,6 +446,7 @@ class TestApprovalReworkFlow:
     def test_approval_rejection_increments_iteration_and_returns_to_develop(self):
         """审批拒绝 → iteration+1 → phase=developing → 触发返工。"""
         import asyncio
+
         from app.graph import await_approval
 
         s = _state(
@@ -461,6 +464,7 @@ class TestApprovalReworkFlow:
     def test_approval_approval_allows_completion(self):
         """审批通过 → phase=done，任务完成。"""
         import asyncio
+
         from app.graph import await_approval
 
         s = _state(
@@ -501,6 +505,7 @@ class TestCancelFlow:
     def test_cancel_during_awaiting_approval(self):
         """在 awaiting_approval 阶段取消，任务应标记为 cancelled。"""
         import asyncio
+
         from app.graph import await_approval
 
         s = _state(
@@ -525,6 +530,7 @@ class TestCancelFlow:
     def test_cancel_before_agent_skips_execution(self):
         """cancel_requested=True 时 agent_node 预检跳过，不写入产出物。"""
         import asyncio
+
         from app.agents import RequirementAgent, agent_node
 
         async def _run():

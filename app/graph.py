@@ -15,7 +15,6 @@ from langgraph.graph import END, StateGraph
 
 from contracts.state import TeamState
 
-
 # =============================================================================
 # 沙箱 Mock 开关：通过环境变量 DEVFLOW_USE_MOCK 控制，默认 true
 # 注意：沙箱和 Agent 可以独立控制。设置 DEVFLOW_USE_SANDBOX=false 单独启用真实沙箱
@@ -151,7 +150,7 @@ async def apply_patches(state: TeamState) -> TeamState:
         _record_event(state, "node_complete", "Patch 应用步骤完成 (Mock)", "apply_patches")
         return state
 
-    from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox
+    from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox
 
     task_id = state["task_meta"]["task_id"]
     meta = state["task_meta"]
@@ -406,8 +405,8 @@ async def run_tests(state: TeamState) -> TeamState:
         return state
 
     import sys
-    _PY = sys.executable
-    _PIP = f'"{_PY}" -m pip'
+    _py = sys.executable
+    _pip = f'"{_py}" -m pip'
 
     if _USE_MOCK_SANDBOX:
         from contracts.sandbox_result import SandboxResult, TestSummary
@@ -430,7 +429,7 @@ async def run_tests(state: TeamState) -> TeamState:
         return state
 
     from app.tools.sandbox_ops import get_sandbox
-    from contracts.sandbox_result import SandboxResult, TestSummary, TestFailure
+    from contracts.sandbox_result import SandboxResult, TestFailure, TestSummary
 
     task_id = state["task_meta"]["task_id"]
     execution_id = str(uuid.uuid4())[:8]
@@ -440,21 +439,21 @@ async def run_tests(state: TeamState) -> TeamState:
         sandbox = get_sandbox(task_id)
 
         # 安装依赖：先尝试 pip install -e .，失败则检查 requirements.txt
-        r = await _sandbox_call(sandbox, f"{_PIP} install -q -e .", cwd="repo", timeout=180)
+        r = await _sandbox_call(sandbox, f"{_pip} install -q -e .", cwd="repo", timeout=180)
         if r.exit_code != 0:
             # 检查 requirements.txt 是否存在
             check = await _sandbox_call(
                 sandbox,
-                f'{_PY} -c "import os; exit(0 if os.path.exists(\'requirements.txt\') else 1)"',
+                f'{_py} -c "import os; exit(0 if os.path.exists(\'requirements.txt\') else 1)"',
                 cwd="repo",
             )
             if check.exit_code == 0:
-                await _sandbox_call(sandbox, f"{_PIP} install -q -r requirements.txt", cwd="repo", timeout=180)
+                await _sandbox_call(sandbox, f"{_pip} install -q -r requirements.txt", cwd="repo", timeout=180)
 
         # 运行 pytest
         import time
         start = time.time()
-        r = await _sandbox_call(sandbox, f"{_PY} -m pytest --tb=short -v", cwd="repo", timeout=300)
+        r = await _sandbox_call(sandbox, f"{_py} -m pytest --tb=short -v", cwd="repo", timeout=300)
         duration_ms = int((time.time() - start) * 1000)
 
         # 解析输出
@@ -480,7 +479,6 @@ async def run_tests(state: TeamState) -> TeamState:
                 is_new_failure=True,
             ).model_dump())
 
-        no_tests_found = r.exit_code == 5 and passed == failed == errors == 0
         result = SandboxResult(
             execution_id=execution_id,
             task_id=task_id,

@@ -158,7 +158,7 @@ def demo_real():
         req = result.get("requirement_analysis", {})
         if req:
             r = req.get("result", {})
-            print(f"[Requirement Agent]")
+            print("[Requirement Agent]")
             print(f"  Summary: {r.get('summary', 'N/A')[:80]}")
             print(f"  Confidence: {r.get('confidence', 0)}")
             print()
@@ -166,7 +166,7 @@ def demo_real():
         plan = result.get("plan", {})
         if plan:
             p = plan.get("result", {})
-            print(f"[Planner Agent]")
+            print("[Planner Agent]")
             print(f"  Approach: {p.get('approach', 'N/A')[:100]}")
             print(f"  Steps: {len(p.get('steps', []))}")
             print(f"  Confidence: {p.get('confidence', 0)}")
@@ -187,7 +187,7 @@ def demo_real():
         review = result.get("review", {})
         if review:
             r = review.get("result", {})
-            print(f"[Reviewer Agent]")
+            print("[Reviewer Agent]")
             print(f"  Passed: {r.get('passed', False)}")
             print(f"  Risk: {r.get('risk_level', 'unknown')}")
             print(f"  Issues: {len(r.get('issues', []))}")
@@ -404,7 +404,7 @@ def demo_d5():
         if sandbox_results:
             last = sandbox_results[-1]
             ts = last.get("test_summary", {})
-            print(f"Sandbox Result:")
+            print("Sandbox Result:")
             print(f"  Status: {last.get('status')}")
             print(f"  Tests: {ts.get('total', 0)} total, "
                   f"{ts.get('passed', 0)} passed, {ts.get('failed', 0)} failed")
@@ -427,7 +427,7 @@ def demo_d5():
                 print("=" * 40)
                 print("  D5 VERIFICATION: SUCCESS")
                 print(f"  All {ts['passed']} tests passed in {elapsed:.1f}s")
-                print(f"  Real bug fixed by AI pipeline!")
+                print("  Real bug fixed by AI pipeline!")
                 print("=" * 40)
             else:
                 print(f"D5: Pipeline completed but {ts.get('failed', '?')} tests failed.")

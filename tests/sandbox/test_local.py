@@ -4,9 +4,7 @@
 不依赖 Docker，不依赖网络。
 """
 
-import os
 import pytest
-from pathlib import Path
 
 from app.sandbox.local import LocalSandbox
 

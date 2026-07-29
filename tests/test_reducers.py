@@ -6,7 +6,6 @@ contracts/state.py 中的 reducer_append 和 reducer_merge_by_file
 errors、patches 等关键字段的正确性。
 """
 
-import pytest
 from contracts.state import reducer_append, reducer_merge_by_file
 
 

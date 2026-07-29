@@ -6,11 +6,9 @@
 """
 
 import asyncio
-import uuid
 from datetime import datetime
 
-import pytest
-from contracts.state import create_initial_state, TeamState
+from contracts.state import TeamState, create_initial_state
 
 EXPECTED_NODES = {
     "init_task",
@@ -82,8 +80,9 @@ class TestBuildGraph:
 
     def test_graph_compiles_with_default_memory_saver(self):
         """不传 checkpointer 时默认使用 MemorySaver。"""
-        from app.graph import build_graph
         from langgraph.checkpoint.memory import MemorySaver
+
+        from app.graph import build_graph
         graph = build_graph()
         checkpointer = getattr(graph, "checkpointer", None)
         assert checkpointer is not None
@@ -236,7 +235,7 @@ class TestSandboxCallAsync:
     def test_sandbox_call_returns_command_result(self):
         """_sandbox_call 应返回正确的 exit_code 和 stdout。"""
         from app.graph import _sandbox_call
-        from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox, reset_all
+        from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox, reset_all
 
         reset_all()
         task_id = "sb-async-001"
@@ -256,7 +255,7 @@ class TestSandboxCallAsync:
     def test_sandbox_call_failing_command(self):
         """命令失败时 exit_code 非 0。"""
         from app.graph import _sandbox_call
-        from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox, reset_all
+        from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox, reset_all
 
         reset_all()
         task_id = "sb-fail-001"
@@ -275,7 +274,7 @@ class TestSandboxCallAsync:
     def test_sandbox_call_timeout(self):
         """命令超时时 timed_out=True。"""
         from app.graph import _sandbox_call
-        from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox, reset_all
+        from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox, reset_all
 
         reset_all()
         task_id = "sb-timeout-001"
@@ -294,7 +293,7 @@ class TestSandboxCallAsync:
     def test_sandbox_call_does_not_block_event_loop(self):
         """_sandbox_call 在独立线程中执行，不阻塞事件循环。"""
         from app.graph import _sandbox_call
-        from app.tools.sandbox_ops import get_sandbox, cleanup_sandbox, reset_all
+        from app.tools.sandbox_ops import cleanup_sandbox, get_sandbox, reset_all
 
         reset_all()
         task_id = "sb-nonblock-001"

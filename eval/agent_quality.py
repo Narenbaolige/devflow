@@ -12,7 +12,7 @@ Agent 质量评测。
     print(metrics.model_dump())
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
