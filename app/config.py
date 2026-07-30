@@ -33,6 +33,11 @@ class Settings:
     CHATANYWHERE_BASE_URL: str = os.getenv(
         "CHATANYWHERE_BASE_URL", "https://api.chatanywhere.tech/v1"
     )
+    # This desktop environment reaches the provider through its system proxy.
+    # Keep that behavior by default; set false only on a network with direct
+    # provider access.
+    LLM_TRUST_ENV: bool = os.getenv("LLM_TRUST_ENV", "true").lower() == "true"
+    LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "0"))
 
     # Sandbox
     SANDBOX_MODE: str = os.getenv("SANDBOX_MODE", "local")

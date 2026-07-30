@@ -39,6 +39,9 @@ class AgentBase(ABC):
 
     # LLM 调用失败时是否自动降级为 Mock 输出（保证流程不中断）
     FALLBACK_TO_MOCK_ON_ERROR: bool = True
+    # Agents that generate larger artifacts may opt into a longer request
+    # window than the lightweight analysis agents.
+    TIMEOUT_SECONDS: int | None = None
 
     # 上下文 Token 预算（粗糙估计：1 token ≈ 4 字符）
     max_context_tokens: int = 2000
@@ -480,7 +483,7 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
     try:
         result = await asyncio.wait_for(
             asyncio.to_thread(agent.invoke, state),
-            timeout=settings.AGENT_TIMEOUT_SECONDS,
+            timeout=agent.TIMEOUT_SECONDS or settings.AGENT_TIMEOUT_SECONDS,
         )
     except TimeoutError:
         # A blocking SDK call may still finish in its worker thread, but it can

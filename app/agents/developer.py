@@ -15,7 +15,15 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 class DeveloperAgent(AgentBase):
 
-    ENABLE_TOOL_CALLING = True
+    # DeepSeek's OpenAI-compatible endpoint accepts ordinary structured
+    # completions reliably in this deployment, while native tool-call payloads
+    # stall at the local proxy.  Generate the patch directly from the verified
+    # plan; sandbox application and tests still run against the real checkout.
+    ENABLE_TOOL_CALLING = False
+    # A unified diff can be substantially larger than a requirement analysis.
+    # Do not turn a valid in-flight model response into a synthetic patch.
+    TIMEOUT_SECONDS = 120
+    FALLBACK_TO_MOCK_ON_ERROR = False
 
     @property
     def role(self) -> AgentRole:
@@ -24,7 +32,7 @@ class DeveloperAgent(AgentBase):
     def _load_system_prompt(self) -> str:
         base = (PROMPTS_DIR / "developer_agent.md").read_text("utf-8")
         tools_guide = PROMPTS_DIR / "developer_tools.md"
-        if tools_guide.exists():
+        if self.ENABLE_TOOL_CALLING and tools_guide.exists():
             base += "\n\n" + tools_guide.read_text("utf-8")
         return base
 
@@ -45,6 +53,14 @@ class DeveloperAgent(AgentBase):
             f"技术方案：{plan_result.get('approach', '待规划')}\n"
             f"修改步骤：{plan_result.get('steps', [])}\n"
         )
+        repository_context = state.get("repository_context") or ""
+        if repository_context:
+            context += (
+                "\n以下是仓库的真实源码摘要。修改已有文件时，file_path 必须出现在摘要中，"
+                "且 original_snippet 必须逐字复制摘要中的原文。"
+                "新增文件时，original_snippet 必须为空字符串，并在 change_type 中使用 add。\n"
+                f"{repository_context}\n"
+            )
 
         # 如果是返工迭代，附上 Reviewer 的反馈
         if review_result and not review_result.get("passed", True):

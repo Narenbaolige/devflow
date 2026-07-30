@@ -20,6 +20,7 @@ export default function TaskCreate() {
   const [maxIterations, setMaxIterations] = useState(DEFAULT_VALUES.max_iterations);
   const [timeoutSeconds, setTimeoutSeconds] = useState(DEFAULT_VALUES.timeout_seconds);
   const [budgetLimit, setBudgetLimit] = useState("");
+  const [publishToRemote, setPublishToRemote] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentTasks, setRecentTasks] = useState<TaskResponse[]>([]);
@@ -46,6 +47,7 @@ export default function TaskCreate() {
         max_iterations: maxIterations,
         timeout_seconds: timeoutSeconds,
         budget_limit_usd: budgetLimit ? parseFloat(budgetLimit) : undefined,
+        publish_to_remote: publishToRemote,
       });
       navigate(`/tasks/${task.task_id}`);
     } catch (err) {
@@ -95,6 +97,11 @@ export default function TaskCreate() {
               <input className={styles.input} type="number" min={0} step={0.001} value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} placeholder="不限制" disabled={submitting} />
             </div>
           </div>
+          <label className={styles.publishOption}>
+            <input type="checkbox" checked={publishToRemote}
+              onChange={(e) => setPublishToRemote(e.target.checked)} disabled={submitting} />
+            验证通过后提交并推送到远程新分支
+          </label>
         </details>
 
         {error && <div className={styles.error}>{error}</div>}

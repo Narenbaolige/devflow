@@ -15,7 +15,14 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 class PlannerAgent(AgentBase):
 
-    ENABLE_TOOL_CALLING = True
+    # The repository is cloned by setup_workspace, which runs *after* this
+    # node.  Offering file tools here therefore makes the model inspect an
+    # empty sandbox and adds an unnecessary provider tool-call round-trip.
+    # Keep planning as a real LLM call; the Developer Agent receives tools
+    # after the workspace is ready.
+    ENABLE_TOOL_CALLING = False
+    TIMEOUT_SECONDS = 120
+    FALLBACK_TO_MOCK_ON_ERROR = False
 
     @property
     def role(self) -> AgentRole:

@@ -7,6 +7,7 @@ LLM 工厂。
 
 from functools import lru_cache
 
+import httpx
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
@@ -74,5 +75,12 @@ def create_llm(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+        # Do not let the OpenAI client retry a request behind the workflow's
+        # back.  The workflow owns the timeout and reports failures visibly.
+        max_retries=settings.LLM_MAX_RETRIES,
+        # httpx otherwise inherits HTTP(S)_PROXY.  This application is often
+        # run beside a local desktop proxy; a stale proxy can leave a blocking
+        # SDK request in CLOSE_WAIT indefinitely.
+        http_client=httpx.Client(timeout=timeout, trust_env=settings.LLM_TRUST_ENV),
         **kwargs,
     )

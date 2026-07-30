@@ -95,10 +95,12 @@ class TeamState(TypedDict):
     patches: Annotated[list[dict], "merge_by_file"]  # 按 file_path 去重
     review: dict | None
     security_review: dict | None
+    repository_context: str | None
 
     # ========== 沙箱层 [C] ==========
     sandbox_results: Annotated[list[dict], "append"]
     publication: dict | None
+    artifact: dict | None
 
 
 # =============================================================================
@@ -159,6 +161,8 @@ def create_initial_state(
         patches=[],
         review=None,
         security_review=None,
+        repository_context=None,
         sandbox_results=[],
         publication=None,
+        artifact=None,
     )

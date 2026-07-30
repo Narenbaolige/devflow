@@ -199,6 +199,18 @@ export default function TaskDetail() {
               {Boolean(task.publication.branch) && <p>分支：{String(task.publication.branch)}</p>}
             </div>
           )}
+          {task.publication && task.publication.status === "skipped" && (
+            <div className={styles.errorSection}>
+              <h3>远程提交未完成</h3>
+              <p>{String(task.publication.error || "未知原因")}</p>
+            </div>
+          )}
+          {task.artifact && taskId && (
+            <div className={`${styles.section} ${styles.successBox}`}>
+              <h3>项目产物</h3>
+              <a href={`/tasks/${taskId}/artifact`}>下载完整项目压缩包</a>
+            </div>
+          )}
 
           {/* 任务完成 */}
           {task.phase === "done" && (

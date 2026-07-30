@@ -37,7 +37,8 @@ class ReviewerAgent(AgentBase):
 
         patch_summary = "\n".join(
             f"  - {p.get('file_path', 'unknown')}: "
-            f"{p.get('change_description', '无描述')}"
+            f"{p.get('change_description', '无描述')}\n"
+            f"    实际修改内容:\n{p.get('patched_snippet', '')[:4000]}"
             for p in patches
         )
 
@@ -50,6 +51,7 @@ class ReviewerAgent(AgentBase):
 
         return (
             f"原始需求：{req_result.get('summary', '无')}\n"
+            f"验收条件：{req_result.get('acceptance_criteria', [])}\n"
             f"代码修改：\n{patch_summary or '  无'}\n"
             f"测试结果：\n{test_summary or '  无'}\n"
             f"\n--- 安全审查 ---\n"

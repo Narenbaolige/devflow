@@ -115,7 +115,12 @@ async def plan_solution(state: TeamState) -> TeamState:
     from app.agents import PlannerAgent, agent_node
 
     state["phase"] = "planning"
+    _record_event(state, "node_start", "开始方案规划", "plan_solution")
     state = await agent_node(state, PlannerAgent())
+    if not (state.get("plan") or {}).get("result"):
+        state["phase"] = "failed"
+        _record_event(state, "error", "方案规划未获得真实模型结果", "plan_solution")
+        return state
     state["phase"] = "developing"
     _record_event(state, "node_complete", "方案规划完成", "plan_solution")
     return state
@@ -130,6 +135,8 @@ async def setup_workspace(state: TeamState) -> TeamState:
     """
     if _blocked(state, "setup_workspace"):
         return state
+
+    _record_event(state, "node_start", "开始准备工作区", "setup_workspace")
 
     if _USE_MOCK_SANDBOX:
         state["phase"] = "developing"
@@ -177,6 +184,35 @@ async def setup_workspace(state: TeamState) -> TeamState:
                 return state
 
         state["phase"] = "developing"
+        # Supply deterministic file contents to the model.  A file list alone
+        # cannot make original_snippet match, so include a bounded excerpt of
+        # each small text file from the real checkout.
+        import tempfile as _tempfile
+        from pathlib import Path as _Path
+
+        snapshot_script = _Path(_tempfile.gettempdir()) / f"devflow-snapshot-{task_id}.py"
+        snapshot_script.write_text('''\
+import subprocess
+from pathlib import Path
+
+budget = 12_000
+parts = []
+for relative_path in subprocess.check_output(["git", "ls-files"], text=True).splitlines():
+    path = Path(relative_path)
+    try:
+        if path.stat().st_size > 50_000:
+            continue
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        continue
+    parts.append(f"FILE: {relative_path}\\n{content[:3_000]}")
+    if sum(len(part) for part in parts) >= budget:
+        break
+print("\\n\\n---\\n\\n".join(parts)[:budget])
+''', encoding="utf-8")
+        snapshot = await _sandbox_call(sandbox, f"python {snapshot_script}", cwd="repo", timeout=20)
+        snapshot_script.unlink(missing_ok=True)
+        state["repository_context"] = snapshot.stdout[:12_000] if snapshot.exit_code == 0 else ""
         _record_event(state, "node_complete", "工作区准备完成，仓库已 clone", "setup_workspace")
     except asyncio.CancelledError:
         state["phase"] = "cancelled"
@@ -251,7 +287,7 @@ async def apply_patches(state: TeamState) -> TeamState:
                 orig_snippet = result.get("original_snippet", "")
                 patched_snippet = result.get("patched_snippet", "")
 
-                if not diff and not (orig_snippet and patched_snippet and file_path):
+                if not diff and not (patched_snippet and file_path):
                     continue
 
                 # 规范化 file_path：去除 LLM 可能返回的绝对路径前缀，保留子目录结构
@@ -276,7 +312,7 @@ async def apply_patches(state: TeamState) -> TeamState:
                     _record_event(state, "progress", f"Patch {i} ({file_path}) git apply 成功", "apply_patches")
 
                 # Phase B: git apply 失败 → 字符串替换（容忍上下文漂移）
-                if not applied and orig_snippet and patched_snippet and file_path:
+                if not applied and patched_snippet and file_path:
                     target = f"repo/{file_path}"
                     # 将代码片段写入临时文件，避免 shell 转义问题
                     orig_file = _Path(_tempfile.gettempdir()) / f"devflow-orig-{task_id}-{i}.txt"
@@ -321,7 +357,7 @@ def write_and_exit(new_content, method):
     sys.exit(0)
 
 # Phase 1: 精确字符串匹配
-if original in content:
+if original and original in content:
     write_and_exit(content.replace(original, patched, 1), "EXACT")
 
 # Phase 2: 按行模糊匹配（容忍 docstring 等中间行差异）
@@ -575,6 +611,30 @@ async def review_code(state: TeamState) -> TeamState:
 
     state["phase"] = "reviewing"
     state = await agent_node(state, ReviewerAgent())
+    # Guard against a generic placeholder implementation being accepted for a
+    # calculator request.  The model-generated patch must actually expose both
+    # addition and subtraction behaviour, not merely mention a calculator.
+    requirement = state.get("task_meta", {}).get("requirement", "").lower()
+    if "calculator" in requirement or "计算器" in requirement:
+        patch_text = "\n".join(
+            " ".join(str(p.get(key, "")) for key in ("patched_snippet", "change_description"))
+            for p in state.get("patches", [])
+        ).lower()
+        has_add = any(token in patch_text for token in ("add", "plus", "加法", " + "))
+        has_subtract = any(token in patch_text for token in ("subtract", "minus", "减法", " - "))
+        if not (has_add and has_subtract):
+            review_result = (state.get("review") or {}).get("result") or {}
+            review_result["passed"] = False
+            review_result["risk_level"] = "medium"
+            review_result.setdefault("issues", []).append({
+                "severity": "major",
+                "file_path": "project",
+                "line_range": None,
+                "description": "计算器实现缺少可验证的加法和减法能力",
+                "suggestion": "实现 add 和 subtract（或等价运算接口），并补充相应测试。",
+            })
+            review_result["actionable_feedback"] = "当前产物不是可用计算器。实现加法与减法运算及测试，不能用占位 Hello World 替代。"
+            state["review"]["result"] = review_result
     state["phase"] = "security_check"
     _record_event(state, "node_complete", "代码审查完成", "review_code")
     return state
@@ -685,6 +745,22 @@ async def finalize(state: TeamState) -> TeamState:
 
     task_id = state["task_meta"]["task_id"]
     try:
+        # Preserve a tangible project artifact before cleaning the temporary
+        # sandbox.  LocalSandbox exposes its task workspace; other backends
+        # continue to use the remote publication path below.
+        from pathlib import Path
+        import shutil
+
+        workspace = getattr(get_sandbox(task_id), "_workspace", None)
+        repo_path = Path(workspace) / "repo" if workspace else None
+        if repo_path and repo_path.is_dir():
+            artifacts_dir = Path(__file__).resolve().parent.parent / "artifacts"
+            artifacts_dir.mkdir(exist_ok=True)
+            archive_base = artifacts_dir / task_id
+            archive_path = shutil.make_archive(str(archive_base), "zip", root_dir=repo_path)
+            state["artifact"] = {"name": f"devflow-{task_id}.zip", "path": archive_path}
+            _record_event(state, "progress", "项目压缩包已生成", "finalize")
+
         if state["task_meta"].get("publish_to_remote", False) and not state.get("cancel_requested", False):
             sandbox = get_sandbox(task_id)
             branch = _publish_branch(task_id)
@@ -728,7 +804,7 @@ async def finalize(state: TeamState) -> TeamState:
 # 条件路由
 # =============================================================================
 
-AnalyzeRoute = Literal["setup_workspace", "await_approval", "handle_error"]
+AnalyzeRoute = Literal["plan_solution", "await_approval", "handle_error"]
 
 
 def route_after_analyze(state: TeamState) -> AnalyzeRoute:
@@ -741,7 +817,7 @@ def route_after_analyze(state: TeamState) -> AnalyzeRoute:
     result = req.get("result", {})
     if result.get("confidence", 0) < 0.6:
         return "await_approval"
-    return "setup_workspace"
+    return "plan_solution"
 
 
 def route_after_apply(state: TeamState) -> Literal["run_tests", "handle_error"]:
@@ -843,18 +919,13 @@ def build_graph(checkpointer=None):
     builder.set_entry_point("init_task")
     builder.add_edge("init_task", "analyze_requirement")
 
-    # 条件路由
-    builder.add_conditional_edges(
-        "analyze_requirement",
-        route_after_analyze,
-        {
-            "setup_workspace": "setup_workspace",
-            "await_approval": "await_approval",
-            "handle_error": "handle_error",
-        },
-    )
-    builder.add_edge("setup_workspace", "plan_solution")
-    builder.add_edge("plan_solution", "develop_changes")
+    # Requirement analysis is followed by planning unconditionally.  The
+    # previous conditional hand-off could leave a background invocation parked
+    # between nodes, displaying a stale "planning" state without ever entering
+    # the Planner node.
+    builder.add_edge("analyze_requirement", "plan_solution")
+    builder.add_edge("plan_solution", "setup_workspace")
+    builder.add_edge("setup_workspace", "develop_changes")
     builder.add_edge("develop_changes", "apply_patches")
     builder.add_conditional_edges(
         "apply_patches",

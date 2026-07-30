@@ -15,9 +15,10 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import graph as workflow
@@ -33,6 +34,20 @@ router = APIRouter()
 
 _tasks_store: dict[str, dict] = {}
 _running_tasks: dict[str, asyncio.Task] = {}
+
+
+def _normalize_repository_reference(repo_url: str, branch: str) -> tuple[str, str]:
+    """Convert a GitHub /tree/<branch> webpage URL into a cloneable URL."""
+    parsed = urlparse(repo_url.strip())
+    if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
+        return repo_url, branch
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) >= 4 and parts[2] == "tree":
+        owner, repository = parts[0], parts[1]
+        selected_branch = "/".join(parts[3:])
+        if owner and repository and selected_branch:
+            return f"https://github.com/{owner}/{repository}.git", selected_branch
+    return repo_url, branch
 
 
 async def _checkpoint_state(task_id: str) -> dict | None:
@@ -115,6 +130,7 @@ class TaskResponse(BaseModel):
     budget_limit_usd: float | None = None
     budget_used_usd: float = 0.0
     publication: dict | None = None
+    artifact: dict | None = None
 
 
 class ApproveRequest(BaseModel):
@@ -163,6 +179,7 @@ def _to_response(state: dict) -> TaskResponse:
         budget_limit_usd=state.get("budget_limit_usd"),
         budget_used_usd=state.get("budget_used_usd", 0.0),
         publication=state.get("publication"),
+        artifact=state.get("artifact"),
     )
 
 
@@ -220,13 +237,57 @@ def _build_task_stats(states: list[dict]) -> TaskStatsResponse:
     )
 
 
+async def _execute_task_pipeline(task_id: str, state: dict) -> dict:
+    """Run the workflow nodes sequentially for API-created tasks.
+
+    This avoids a LangGraph scheduler hang observed after requirement analysis
+    while retaining the same real agents, sandbox, tests and review nodes.
+    """
+    for node in (workflow.init_task, workflow.analyze_requirement, workflow.plan_solution, workflow.setup_workspace):
+        state = await node(state)
+        _tasks_store[task_id] = state
+        if state.get("phase") in {"failed", "cancelled", "awaiting_approval"}:
+            return state
+
+    while True:
+        for node in (workflow.develop_changes, workflow.apply_patches, workflow.run_tests):
+            state = await node(state)
+            _tasks_store[task_id] = state
+            if state.get("phase") in {"failed", "cancelled", "awaiting_approval"}:
+                return state
+
+        if workflow.route_after_test(state) == "develop_changes":
+            continue
+        if workflow.route_after_test(state) != "review_code":
+            state = await workflow.handle_error(state)
+            _tasks_store[task_id] = state
+            return state
+
+        state = await workflow.review_code(state)
+        _tasks_store[task_id] = state
+        if workflow.route_after_review(state) == "develop_changes":
+            continue
+        if workflow.route_after_review(state) != "security_check":
+            state = await workflow.handle_error(state)
+            _tasks_store[task_id] = state
+            return state
+
+        state = await workflow.security_check(state)
+        _tasks_store[task_id] = state
+        if state.get("phase") == "awaiting_approval":
+            return state
+        if state.get("phase") != "done":
+            return state
+        state = await workflow.finalize(state)
+        _tasks_store[task_id] = state
+        return state
+
+
 async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> None:
     """后台运行图，使查询和取消 API 在任务执行期间仍可响应。"""
     config = {"configurable": {"thread_id": task_id}}
     try:
-        result = await asyncio.wait_for(
-            workflow.graph.ainvoke(initial_state, config), timeout=timeout_seconds
-        )
+        result = await asyncio.wait_for(_execute_task_pipeline(task_id, initial_state), timeout=timeout_seconds)
         _tasks_store[task_id] = result
     except TimeoutError:
         state = await _checkpoint_state(task_id) or initial_state
@@ -247,6 +308,30 @@ async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> 
     except asyncio.CancelledError:
         # cancel_task 已写入 cancelled 状态；避免后台协程覆盖该状态。
         raise
+    except Exception as exc:
+        # A graph error used to terminate this background task silently, leaving
+        # the last checkpoint displayed forever as an in-progress phase.
+        state = await _checkpoint_state(task_id) or initial_state
+        state["phase"] = "failed"
+        state.setdefault("errors", []).append({
+            "node": state.get("current_node") or "runtime",
+            "error_type": "unknown",
+            "message": f"工作流异常: {type(exc).__name__}: {exc}",
+            "timestamp": datetime.now().isoformat(),
+            "recoverable": False,
+            "retry_count": state.get("iteration", 0),
+        })
+        state.setdefault("events", []).append({
+            "event_id": str(uuid.uuid4()), "task_id": task_id,
+            "event_type": "error", "node_name": state.get("current_node") or "runtime",
+            "timestamp": datetime.now().isoformat(),
+            "message": state["errors"][-1]["message"], "data": {"phase": "failed"},
+        })
+        _tasks_store[task_id] = state
+        try:
+            await workflow.graph.aupdate_state(config, state)
+        except Exception:
+            pass
     finally:
         _running_tasks.pop(task_id, None)
 
@@ -263,6 +348,7 @@ async def create_task(req: CreateTaskRequest):
     提交一个软件需求，系统将自动启动多 Agent 协同开发流程。
     """
     task_id = str(uuid.uuid4())[:8]
+    repo_url, branch = _normalize_repository_reference(req.repo_url, req.branch)
 
     # 构建初始状态
     budget_limit = req.budget_limit_usd
@@ -270,8 +356,8 @@ async def create_task(req: CreateTaskRequest):
         budget_limit = settings.TASK_BUDGET_USD
     initial_state = create_initial_state(
         task_id=task_id,
-        repo_url=req.repo_url,
-        branch=req.branch,
+        repo_url=repo_url,
+        branch=branch,
         requirement=req.requirement,
         max_iterations=req.max_iterations,
         execution_timeout_seconds=req.timeout_seconds,
@@ -309,6 +395,21 @@ async def get_task(task_id: str):
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
 
     return _to_response(state)
+
+
+@router.get("/{task_id}/artifact")
+async def download_artifact(task_id: str):
+    """Download the exported project archive for a completed local task."""
+    state = await _checkpoint_state(task_id)
+    artifact = (state or {}).get("artifact") or {}
+    path = artifact.get("path")
+    if not path:
+        raise HTTPException(status_code=404, detail="该任务没有可下载的项目产物")
+    from pathlib import Path
+    archive = Path(path)
+    if not archive.is_file():
+        raise HTTPException(status_code=404, detail="项目产物已不存在")
+    return FileResponse(archive, filename=artifact.get("name") or archive.name)
 
 
 @router.get("", response_model=TaskListResponse)

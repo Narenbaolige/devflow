@@ -225,6 +225,7 @@ export interface TaskResponse {
   budget_limit_usd: number | null;
   budget_used_usd: number;
   publication: Record<string, unknown> | null;
+  artifact: Record<string, unknown> | null;
 }
 
 export interface TaskListResponse {
@@ -258,7 +259,7 @@ export interface NodeConfig {
 export const WORKFLOW_NODES: NodeConfig[] = [
   { key: "init_task",          label: "初始化",     icon: "🚀", agentRole: null },
   { key: "analyze_requirement", label: "需求分析",   icon: "📋", agentRole: "requirement" },
-  { key: "create_plan",        label: "方案规划",   icon: "📝", agentRole: "planner" },
+  { key: "plan_solution",      label: "方案规划",   icon: "📝", agentRole: "planner" },
   { key: "develop_changes",    label: "代码生成",   icon: "💻", agentRole: "developer" },
   { key: "run_tests",          label: "运行测试",   icon: "🧪", agentRole: null },
   { key: "review_changes",     label: "代码审查",   icon: "🔍", agentRole: "reviewer" },
