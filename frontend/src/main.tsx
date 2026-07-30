@@ -31,9 +31,9 @@ style.textContent = `
     --border-strong: rgba(0,0,0,0.16);
 
     /* ── 文字（深灰，保证对比度） ── */
-    --text-primary: #262A2C;
-    --text-secondary: #5B6063;
-    --text-muted: #8B9093;
+    --text-primary: #1A1E20;
+    --text-secondary: #3E4447;
+    --text-muted: #6B7175;
 
     /* ── 状态色（在灰阶背景上醒目） ── */
     --accent: #2FAE73;
