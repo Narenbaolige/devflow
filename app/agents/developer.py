@@ -41,15 +41,16 @@ class DeveloperAgent(AgentBase):
         base = (PROMPTS_DIR / "developer_agent.md").read_text("utf-8")
         base += """
 
-## Delivery contract (non-negotiable)
+## 交付约束（系统指令，不要复制到输出中）
 
-Return one complete `patches` array, with one PatchResult for every file that
-must change. Implement every acceptance criterion, not merely the first
-planning step. Include focused automated tests whenever behavior changes.
-Never use placeholder output, Hello World, TODO-only code, or claim a feature
-is implemented without executable behavior. For existing files, copy
-`original_snippet` verbatim from the supplied repository source. For new files,
-use `change_type: add` and an empty `original_snippet`.
+以下为系统级约束，仅用于指导你的行为，**不要**将这些文字写入任何生成的文件中：
+
+- 每个需要修改的文件对应一个 patch，放入 `patches` 数组
+- 实现所有验收条件，不能只做第一步
+- 新功能必须包含自动化测试
+- 禁止占位符/Hello World/TODO/空壳代码
+- 修改已有文件时，`original_snippet` 必须从仓库源码中逐字复制
+- 新建文件时，`change_type: add`，`original_snippet` 留空
 """
         tools_guide = PROMPTS_DIR / "developer_tools.md"
         if self.ENABLE_TOOL_CALLING and tools_guide.exists():

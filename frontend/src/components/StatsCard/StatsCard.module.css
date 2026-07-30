@@ -9,7 +9,7 @@
 
 .label {
   font-size: 11px;
-  color: #333;
+  color: var(--text-secondary);
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
@@ -21,11 +21,11 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
-  color: #000;
+  color: var(--text-primary);
   font-family: var(--font-ui);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.unit { font-size: 13px; font-weight: 500; color: #444; margin-left: 3px; }
+.unit { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-left: 3px; }
