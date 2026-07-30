@@ -443,14 +443,15 @@ async def approve_task(task_id: str, req: ApproveRequest = ApproveRequest()):
     if state.get("phase") != "awaiting_approval":
         raise HTTPException(status_code=409, detail="任务不在等待审批状态")
 
-    config = {"configurable": {"thread_id": task_id}}
-    await workflow.graph.aupdate_state(
-        config, {"approval_granted": True, "approval_feedback": req.feedback}
-    )
-    # None 表示从 checkpoint 的中断点继续，而不是从 init_task 重新开始。
-    result = await workflow.graph.ainvoke(None, config)
-    _tasks_store[task_id] = result
-    return _to_response(result)
+    # API tasks run through the sequential executor, so there is no LangGraph
+    # interrupt checkpoint to resume. Continue from the in-memory task state.
+    state["approval_granted"] = True
+    state["approval_feedback"] = req.feedback
+    state = await workflow.await_approval(state)
+    if state.get("phase") == "done":
+        state = await workflow.finalize(state)
+    _tasks_store[task_id] = state
+    return _to_response(state)
 
 
 @router.post("/{task_id}/reject", response_model=TaskResponse)
@@ -466,13 +467,15 @@ async def reject_task(task_id: str, req: ApproveRequest = ApproveRequest()):
     if state.get("phase") != "awaiting_approval":
         raise HTTPException(status_code=409, detail="任务不在等待审批状态")
 
-    config = {"configurable": {"thread_id": task_id}}
-    await workflow.graph.aupdate_state(
-        config, {"approval_granted": False, "approval_feedback": req.feedback}
-    )
-    result = await workflow.graph.ainvoke(None, config)
-    _tasks_store[task_id] = result
-    return _to_response(result)
+    state["approval_granted"] = False
+    state["approval_feedback"] = req.feedback
+    state = await workflow.await_approval(state)
+    _tasks_store[task_id] = state
+    if state.get("phase") == "developing":
+        _running_tasks[task_id] = asyncio.create_task(
+            _execute_task_pipeline(task_id, state), name=f"devflow-rework-{task_id}"
+        )
+    return _to_response(state)
 
 
 @router.post("/{task_id}/cancel", response_model=TaskResponse)
