@@ -1,28 +1,24 @@
-.container { border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-input); overflow: hidden; }
-.status { display: flex; align-items: center; gap: 16px; padding: 12px 16px; font-size: 13px; color: var(--text-secondary); font-family: var(--font-ui); }
-.badge { padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; font-family: var(--font-ui); }
-.success { background: var(--success-subtle); color: var(--accent); }
+.container { border: 1px solid rgba(0,0,0,0.06); border-radius: var(--radius-md); background: rgba(255,255,255,0.45); overflow: hidden; }
+.status { display: flex; align-items: center; gap: 16px; padding: 12px 16px; font-size: 13px; color: var(--text-secondary); }
+.badge { padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.success { background: var(--success-subtle); color: var(--accent-strong); }
 .failure { background: var(--danger-subtle); color: var(--danger); }
 .timeout { background: var(--warning-subtle); color: var(--warning); }
 .error   { background: var(--danger-subtle); color: var(--danger); }
-.stderr { margin: 0 16px 14px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); font-size: 12px; color: var(--danger); white-space: pre-wrap; max-height: 180px; overflow-y: auto; font-family: var(--font-mono); }
-
+.stderr { margin: 0 16px 14px; padding: 12px; background: rgba(0,0,0,0.02); border-radius: var(--radius-sm); font-size: 12px; color: var(--danger); white-space: pre-wrap; max-height: 180px; overflow-y: auto; font-family: var(--font-mono); }
 .summary { display: flex; gap: 10px; padding: 18px; flex-wrap: wrap; }
-.summaryItem { display: flex; flex-direction: column; align-items: center; min-width: 60px; padding: 12px 16px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); }
+.summaryItem { display: flex; flex-direction: column; align-items: center; min-width: 60px; padding: 12px 16px; background: rgba(255,255,255,0.55); border-radius: var(--radius-sm); }
 .summaryNum { font-family: var(--font-brand); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .summaryLabel { font-size: 11px; color: var(--text-muted); margin-top: 3px; font-weight: 500; }
-
 .progressBar { display: flex; height: 5px; margin: 0 18px; border-radius: 3px; overflow: hidden; }
-.progressPass { background: var(--accent); transition: width .3s; }
-.progressFail { background: var(--danger); transition: width .3s; }
-
-.failures { padding: 18px; border-top: 1px solid var(--border-subtle); }
+.progressPass { background: var(--accent); } .progressFail { background: var(--danger); }
+.failures { padding: 18px; border-top: 1px solid rgba(0,0,0,0.04); }
 .failures h4 { margin: 0 0 14px; font-size: 14px; color: var(--danger); font-weight: 600; }
-.failureItem { background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; }
+.failureItem { background: rgba(255,255,255,0.55); border: 1px solid rgba(0,0,0,0.05); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; }
 .failureHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .failureTest { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
 .failureBadge { font-size: 10px; padding: 2px 8px; border-radius: 8px; }
 .newFailure { background: var(--danger-subtle); color: var(--danger); }
-.existingFailure { background: rgba(107,119,135,.08); color: var(--text-secondary); }
+.existingFailure { background: rgba(0,0,0,0.04); color: var(--text-secondary); }
 .failureMsg { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
-.traceback { font-size: 11px; color: var(--text-muted); white-space: pre-wrap; padding: 10px; background: var(--bg-input); border-radius: var(--radius-sm); max-height: 140px; overflow-y: auto; font-family: var(--font-mono); }
+.traceback { font-size: 11px; color: var(--text-muted); white-space: pre-wrap; padding: 10px; background: rgba(0,0,0,0.02); border-radius: var(--radius-sm); max-height: 140px; overflow-y: auto; font-family: var(--font-mono); }

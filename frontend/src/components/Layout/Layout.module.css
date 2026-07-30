@@ -1,12 +1,12 @@
-.wrapper { min-height: 100vh; position: relative; z-index: 1; }
+.wrapper { min-height: 100vh; position: relative; z-index: 2; }
 
 .nav {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 32px; height: 56px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-bottom: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 0 2px 12px rgba(20,22,24,0.06);
   position: sticky; top: 0; z-index: 100;
 }
 
@@ -14,44 +14,41 @@
 
 .logoBox {
   width: 30px; height: 30px;
-  background: linear-gradient(135deg, var(--accent), #22C57A);
+  background: linear-gradient(135deg, var(--accent), #1F9A5E);
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(47,174,115,0.2);
 }
-
 .logoIcon { color: #fff; stroke-width: 2.5; }
 
 .title {
   font-family: var(--font-brand); font-size: 17px;
   font-weight: 700; letter-spacing: -0.3px; color: var(--text-primary);
 }
-
 .subtitle {
   font-size: 11px; color: var(--text-muted);
-  padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.12);
+  padding-left: 10px; border-left: 1px solid rgba(0,0,0,0.12);
   font-weight: 500;
 }
 
 .links {
   display: flex; align-items: center; gap: 2px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px; padding: 3px;
-  backdrop-filter: blur(8px);
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 12px; padding: 3px;
+  backdrop-filter: blur(10px);
 }
-
 .link {
   text-decoration: none; color: var(--text-secondary);
-  padding: 6px 14px; border-radius: 7px;
+  padding: 6px 14px; border-radius: 9px;
   font-size: 13px; font-weight: 500;
   display: flex; align-items: center; gap: 6px;
   transition: all 0.15s;
 }
-.link:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
-
+.link:hover { color: var(--text-primary); background: rgba(255,255,255,0.5); }
 .active {
-  color: var(--accent) !important;
-  background: var(--accent-subtle);
+  color: var(--accent-strong) !important;
+  background: rgba(255,255,255,0.75);
 }
 
-.main { max-width: 1280px; margin: 0 auto; padding: 36px 32px; position: relative; z-index: 1; }
+.main { max-width: 1280px; margin: 0 auto; padding: 36px 32px; position: relative; z-index: 2; }

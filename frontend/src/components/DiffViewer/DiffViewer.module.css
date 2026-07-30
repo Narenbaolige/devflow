@@ -1,29 +1,19 @@
-.container { border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 14px; }
-.header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px; background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid var(--border-subtle);
-}
+.container { border: 1px solid rgba(0,0,0,0.06); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 14px; background: rgba(255,255,255,0.4); }
+.header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: rgba(0,0,0,0.02); border-bottom: 1px solid rgba(0,0,0,0.04); }
 .filePath { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--text-primary); flex: 1; }
-.changeType {
-  font-size: 9px; padding: 2px 8px; border-radius: 4px;
-  font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
-  font-family: var(--font-ui);
-}
-.add    { background: var(--success-subtle); color: var(--accent); }
+.changeType { font-size: 9px; padding: 2px 8px; border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.add    { background: var(--success-subtle); color: var(--accent-strong); }
 .modify { background: var(--warning-subtle); color: var(--warning); }
 .delete { background: var(--danger-subtle); color: var(--danger); }
-.rename { background: var(--blue-subtle);   color: var(--blue); }
-.description { padding: 8px 16px; font-size: 12px; color: var(--text-secondary); background: var(--bg-input); border-bottom: 1px solid var(--border-subtle); }
-.diffBox { background: var(--bg-input); overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.rename { background: var(--blue-subtle); color: var(--blue); }
+.description { padding: 8px 16px; font-size: 12px; color: var(--text-secondary); background: rgba(0,0,0,0.01); border-bottom: 1px solid rgba(0,0,0,0.04); }
+.diffBox { background: rgba(0,0,0,0.015); overflow-x: auto; max-height: 420px; overflow-y: auto; }
 .noDiff { padding: 20px; font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .diffTable { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; line-height: 20px; }
 .diffLine { height: 20px; }
 .lineNum { width: 44px; min-width: 44px; text-align: right; padding-right: 10px; color: var(--text-muted); user-select: none; font-size: 10.5px; vertical-align: top; }
-.lineMarker { width: 16px; text-align: center; color: rgba(255,255,255,.2); user-select: none; font-weight: 700; }
-.lineContent { padding-right: 14px; white-space: pre; vertical-align: top; }
-.addLine { background: rgba(62,232,160,.06); }
-.addLine .lineMarker { color: var(--accent); }
-.delLine { background: rgba(240,98,110,.06); }
-.delLine .lineMarker { color: var(--danger); }
-.headerLine { background: rgba(107,164,248,.04); color: var(--blue); }
+.lineMarker { width: 16px; text-align: center; color: rgba(0,0,0,0.2); user-select: none; font-weight: 700; }
+.lineContent { padding-right: 14px; white-space: pre; vertical-align: top; color: var(--text-primary); }
+.addLine { background: rgba(47,174,115,.06); } .addLine .lineMarker { color: var(--accent); }
+.delLine { background: rgba(224,87,107,.06); } .delLine .lineMarker { color: var(--danger); }
+.headerLine { background: rgba(62,142,222,.04); color: var(--blue); }

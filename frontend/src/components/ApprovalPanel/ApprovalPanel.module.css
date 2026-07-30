@@ -1,31 +1,15 @@
-.container {
-  background: var(--warning-subtle); border: 1px solid rgba(245,182,66,.25);
-  border-radius: var(--radius-lg); padding: 22px;
-}
+.container { background: var(--warning-subtle); border: 1px solid rgba(224,163,57,.25); backdrop-filter: blur(12px); border-radius: var(--radius-lg); padding: 22px; }
 .header { display: flex; gap: 12px; margin-bottom: 14px; }
 .header h4 { margin: 0 0 4px; font-size: 15px; color: var(--warning); font-family: var(--font-brand); font-weight: 700; }
-.hint { margin: 0; font-size: 13px; color: var(--text-secondary); font-family: var(--font-ui); }
-
-.textarea {
-  width: 100%; background: var(--bg-input); border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm); padding: 10px 14px;
-  color: var(--text-primary); font-size: 13px;
-  font-family: var(--font-ui); resize: vertical; margin-bottom: 14px;
-}
+.hint { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.textarea { width: 100%; background: var(--input-bg); border: 1px solid rgba(0,0,0,0.08); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text-primary); font-size: 13px; resize: vertical; margin-bottom: 14px; }
 .textarea:focus { outline: none; border-color: var(--warning); }
-
 .buttons { display: flex; gap: 10px; }
-.approveBtn, .rejectBtn {
-  padding: 9px 22px; border-radius: var(--radius-sm);
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  font-family: var(--font-ui); transition: all .15s; border: 1px solid;
-}
-.approveBtn { background: var(--accent); border-color: transparent; color: #0f1620; }
+.approveBtn, .rejectBtn { padding: 9px 22px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; border: 1px solid; }
+.approveBtn { background: var(--accent); border-color: transparent; color: #fff; }
 .approveBtn:hover:not(:disabled) { background: var(--accent-strong); transform: translateY(-1px); }
 .rejectBtn { background: transparent; border-color: var(--danger); color: var(--danger); }
 .rejectBtn:hover:not(:disabled) { background: var(--danger-subtle); }
 .approveBtn:disabled, .rejectBtn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-
 .approvedBox, .rejectedBox { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
-.approvedBox { color: var(--accent); }
-.rejectedBox { color: var(--danger); }
+.approvedBox { color: var(--accent-strong); } .rejectedBox { color: var(--danger); }
