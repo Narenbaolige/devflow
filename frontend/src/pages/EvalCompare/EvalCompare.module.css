@@ -1,115 +1,30 @@
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-}
+.container { max-width: 960px; margin: 0 auto; }
 
-.container h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
+.container h1 { font-size: 32px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.8px; line-height: 1.15; }
+.subtitle { color: var(--text-secondary); margin-bottom: 32px; font-size: 15px; }
 
-.subtitle {
-  color: #8b949e;
-  margin-bottom: 28px;
-  font-size: 15px;
-}
+.statsRow { display: flex; gap: 14px; margin-bottom: 32px; }
 
-/* ── 统计卡片 ── */
-.statsRow {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 28px;
-}
-
-/* ── 表格 ── */
 .section {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
 }
+.section h3 { margin: 0 0 18px; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
 
-.section h3 {
-  margin: 0 0 16px;
-  font-size: 16px;
-  font-weight: 600;
-}
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 11px 16px; text-align: left; font-size: 14px; border-bottom: 1px solid var(--border-subtle); }
+.table th { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.6px; }
+.metricName { font-weight: 600; }
+.winner { color: var(--success); font-weight: 600; }
+.gain { font-family: monospace; font-weight: 600; color: var(--accent); font-size: 13px; }
 
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table th,
-.table td {
-  padding: 10px 14px;
-  text-align: left;
-  font-size: 14px;
-  border-bottom: 1px solid #30363d;
-}
-
-.table th {
-  font-size: 12px;
-  text-transform: uppercase;
-  color: #8b949e;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.metricName {
-  font-weight: 600;
-  color: #e6edf3;
-}
-
-.winner {
-  color: #3fb950;
-  font-weight: 600;
-}
-
-.gain {
-  font-family: monospace;
-  font-weight: 600;
-  color: #58a6ff;
-}
-
-/* ── 图表容器 ── */
 .chartBox {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  padding: 16px;
+  background: var(--bg-input); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 20px;
 }
 
-/* ── 发现 ── */
-.findings {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.finding {
-  display: flex;
-  gap: 12px;
-}
-
-.findingIcon {
-  font-size: 22px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.finding strong {
-  display: block;
-  color: #e6edf3;
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
-.finding p {
-  margin: 0;
-  font-size: 13px;
-  color: #8b949e;
-  line-height: 1.5;
-}
+.findings { display: flex; flex-direction: column; gap: 18px; }
+.finding { display: flex; gap: 14px; }
+.findingIcon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
+.finding strong { display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px; font-weight: 600; }
+.finding p { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.55; }

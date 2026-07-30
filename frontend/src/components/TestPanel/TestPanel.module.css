@@ -1,147 +1,32 @@
-.container {
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  background: #0d1117;
-  overflow: hidden;
-}
+.container { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-input); overflow: hidden; }
+.status { display: flex; align-items: center; gap: 16px; padding: 12px 16px; font-size: 13px; color: var(--text-secondary); }
+.badge { padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.success { background: var(--success-subtle); color: var(--success); }
+.failure { background: var(--danger-subtle); color: var(--danger); }
+.timeout { background: var(--warning-subtle); color: var(--warning); }
+.error   { background: var(--danger-subtle); color: var(--danger); }
+.stderr { margin: 0 16px 14px; padding: 12px; background: var(--bg-card); border-radius: var(--radius-sm); font-size: 12px; color: var(--danger); white-space: pre-wrap; max-height: 180px; overflow-y: auto; }
 
-.status {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 14px;
-  font-size: 13px;
-  color: #8b949e;
-}
-
-.badge {
-  padding: 2px 10px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.success { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
-.failure { background: rgba(248, 81, 73, 0.15); color: #f85149; }
-.timeout { background: rgba(210, 153, 34, 0.15); color: #d29922; }
-.error   { background: rgba(248, 81, 73, 0.15); color: #f85149; }
-
-.stderr {
-  margin: 0 14px 12px;
-  padding: 10px;
-  background: #161b22;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #f85149;
-  white-space: pre-wrap;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-/* ── 汇总 ── */
-.summary {
-  display: flex;
-  gap: 8px;
-  padding: 16px;
-  flex-wrap: wrap;
-}
-
+.summary { display: flex; gap: 10px; padding: 18px; flex-wrap: wrap; }
 .summaryItem {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 56px;
-  padding: 8px 12px;
-  background: #161b22;
-  border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 60px; padding: 12px 16px;
+  background: var(--bg-card); border-radius: var(--radius-sm);
 }
+.summaryNum { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.summaryLabel { font-size: 11px; color: var(--text-muted); margin-top: 3px; font-weight: 500; }
 
-.summaryNum {
-  font-size: 20px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
+.progressBar { display: flex; height: 5px; margin: 0 18px; border-radius: 3px; overflow: hidden; }
+.progressPass { background: var(--success); transition: width .3s; }
+.progressFail { background: var(--danger); transition: width .3s; }
 
-.summaryLabel {
-  font-size: 11px;
-  color: #8b949e;
-  margin-top: 2px;
-}
-
-/* ── 进度条 ── */
-.progressBar {
-  display: flex;
-  height: 6px;
-  margin: 0 16px;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progressPass { background: #3fb950; transition: width 0.3s; }
-.progressFail { background: #f85149; transition: width 0.3s; }
-
-/* ── 失败详情 ── */
-.failures {
-  padding: 16px;
-  border-top: 1px solid #30363d;
-}
-
-.failures h4 {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: #f85149;
-}
-
-.failureItem {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-}
-
-.failureHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.failureTest {
-  font-family: monospace;
-  font-size: 13px;
-  color: #e6edf3;
-}
-
-.failureBadge {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 8px;
-}
-
-.newFailure {
-  background: rgba(248, 81, 73, 0.15);
-  color: #f85149;
-}
-
-.existingFailure {
-  background: rgba(139, 148, 158, 0.12);
-  color: #8b949e;
-}
-
-.failureMsg {
-  font-size: 13px;
-  color: #c9d1d9;
-  margin-bottom: 6px;
-}
-
-.traceback {
-  font-size: 11px;
-  color: #8b949e;
-  white-space: pre-wrap;
-  padding: 8px;
-  background: #0d1117;
-  border-radius: 4px;
-  max-height: 160px;
-  overflow-y: auto;
-}
+.failures { padding: 18px; border-top: 1px solid var(--border-subtle); }
+.failures h4 { margin: 0 0 14px; font-size: 14px; color: var(--danger); font-weight: 600; }
+.failureItem { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; }
+.failureHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.failureTest { font-family: monospace; font-size: 13px; color: var(--text-primary); }
+.failureBadge { font-size: 10px; padding: 2px 8px; border-radius: 8px; }
+.newFailure { background: var(--danger-subtle); color: var(--danger); }
+.existingFailure { background: rgba(160,160,168,.08); color: var(--text-secondary); }
+.failureMsg { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4; }
+.traceback { font-size: 11px; color: var(--text-muted); white-space: pre-wrap; padding: 10px; background: var(--bg-input); border-radius: var(--radius-sm); max-height: 140px; overflow-y: auto; }

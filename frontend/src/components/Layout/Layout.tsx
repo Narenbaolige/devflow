@@ -6,7 +6,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className={styles.wrapper}>
       <nav className={styles.nav}>
         <div className={styles.brand}>
-          <span className={styles.logo}>⚡</span>
+          <div className={styles.logo}>⚡</div>
           <span className={styles.title}>DevFlow</span>
           <span className={styles.subtitle}>Multi-Agent Platform</span>
         </div>

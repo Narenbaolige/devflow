@@ -1,100 +1,37 @@
 .container {
   background: rgba(210, 153, 34, 0.06);
   border: 1px solid rgba(210, 153, 34, 0.3);
-  border-radius: 8px;
-  padding: 18px;
+  border-radius: var(--radius-lg);
+  padding: 20px;
 }
 
-.header {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
+.header { display: flex; gap: 12px; margin-bottom: 14px; }
 .warnIcon { font-size: 28px; }
-
-.header h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  color: #d29922;
-}
-
-.hint {
-  margin: 0;
-  font-size: 13px;
-  color: #8b949e;
-}
+.header h4 { margin: 0 0 4px; font-size: 15px; color: var(--warning); }
+.hint { margin: 0; font-size: 13px; color: var(--text-secondary); }
 
 .textarea {
-  width: 100%;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  padding: 10px 14px;
-  color: #e6edf3;
-  font-size: 13px;
-  font-family: inherit;
-  resize: vertical;
-  margin-bottom: 12px;
+  width: 100%; background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  color: var(--text-primary); font-size: 13px;
+  font-family: inherit; resize: vertical; margin-bottom: 12px;
 }
+.textarea:focus { outline: none; border-color: var(--warning); }
 
-.textarea:focus {
-  outline: none;
-  border-color: #d29922;
+.buttons { display: flex; gap: 10px; }
+
+.approveBtn, .rejectBtn {
+  padding: 8px 20px; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s; border: 1px solid;
 }
-
-.buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.approveBtn,
-.rejectBtn {
-  padding: 8px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  border: 1px solid;
-}
-
-.approveBtn {
-  background: #238636;
-  border-color: rgba(240, 246, 252, 0.1);
-  color: #fff;
-}
-
+.approveBtn { background: #238636; border-color: rgba(240, 246, 252, 0.1); color: #fff; }
 .approveBtn:hover:not(:disabled) { background: #2ea043; }
+.rejectBtn { background: transparent; border-color: var(--danger); color: var(--danger); }
+.rejectBtn:hover:not(:disabled) { background: var(--danger-subtle); }
+.approveBtn:disabled, .rejectBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.rejectBtn {
-  background: transparent;
-  border-color: #f85149;
-  color: #f85149;
-}
-
-.rejectBtn:hover:not(:disabled) { background: rgba(248, 81, 73, 0.1); }
-
-.approveBtn:disabled,
-.rejectBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.approvedBox {
-  border-color: rgba(63, 185, 80, 0.4);
-  background: rgba(63, 185, 80, 0.06);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.rejectedBox {
-  border-color: rgba(248, 81, 73, 0.4);
-  background: rgba(248, 81, 73, 0.06);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
+.approvedBox { border-color: rgba(63, 185, 80, 0.4); background: var(--success-subtle); display: flex; align-items: center; gap: 10px; }
+.rejectedBox { border-color: rgba(248, 81, 73, 0.4); background: var(--danger-subtle); display: flex; align-items: center; gap: 10px; }
 .resultIcon { font-size: 20px; }
