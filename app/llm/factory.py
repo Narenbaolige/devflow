@@ -36,7 +36,7 @@ def create_llm(
     model: str = "gpt-4o-mini",
     temperature: float = 0.1,
     max_tokens: int = 4096,
-    timeout: int = 120,
+    timeout: int | None = None,
 ) -> ChatOpenAI:
     """
     创建 LLM 实例。

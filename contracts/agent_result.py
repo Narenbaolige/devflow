@@ -105,6 +105,12 @@ class PatchResult(BaseModel):
     change_type: Literal["add", "modify", "delete", "rename"]
 
 
+class PatchSetResult(BaseModel):
+    """Developer 一次交付的完整补丁集，可覆盖实现、测试和配置等多个文件。"""
+
+    patches: list[PatchResult] = Field(min_length=1, max_length=12)
+
+
 # =============================================================================
 # Reviewer Agent（含测试结果分析）
 # =============================================================================

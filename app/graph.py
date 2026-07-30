@@ -13,6 +13,7 @@ from typing import Literal
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
+from app.config import settings
 from contracts.state import TeamState
 
 # =============================================================================
@@ -78,9 +79,10 @@ def _publish_branch(task_id: str) -> str:
     return f"devflow/{task_id}"
 
 
-async def _sandbox_call(sandbox, command: str, *, cwd: str = "/workspace", timeout: int = 60):
+async def _sandbox_call(sandbox, command: str, *, cwd: str = "/workspace", timeout: int | None = None):
     """在独立线程中调用沙箱命令，避免阻塞事件循环。"""
-    return await asyncio.to_thread(sandbox.execute, command, cwd=cwd, timeout=timeout)
+    effective_timeout = timeout if settings.SANDBOX_TIMEOUT_SECONDS is not None else None
+    return await asyncio.to_thread(sandbox.execute, command, cwd=cwd, timeout=effective_timeout)
 
 
 # =============================================================================
@@ -102,7 +104,10 @@ async def analyze_requirement(state: TeamState) -> TeamState:
     from app.agents import RequirementAgent, agent_node
 
     state["phase"] = "analyzing"
+    _record_event(state, "node_start", "开始需求分析", "analyze_requirement")
     state = await agent_node(state, RequirementAgent())
+    if state.get("phase") == "failed":
+        return state
     state["phase"] = "planning"
     _record_event(state, "node_complete", "需求分析完成", "analyze_requirement")
     return state
@@ -246,7 +251,10 @@ async def develop_changes(state: TeamState) -> TeamState:
     from app.agents import DeveloperAgent, agent_node
 
     state["phase"] = "developing"
+    _record_event(state, "node_start", "开始代码开发", "develop_changes")
     state = await agent_node(state, DeveloperAgent())
+    if state.get("phase") == "failed":
+        return state
     state["iteration"] = state.get("iteration", 0) + 1
     state["phase"] = "testing"
     _record_event(state, "node_complete", "代码修改完成", "develop_changes")
@@ -626,7 +634,10 @@ async def review_code(state: TeamState) -> TeamState:
     from app.agents import ReviewerAgent, agent_node
 
     state["phase"] = "reviewing"
+    _record_event(state, "node_start", "开始代码审查", "review_code")
     state = await agent_node(state, ReviewerAgent())
+    if state.get("phase") == "failed":
+        return state
     # Guard against a generic placeholder implementation being accepted for a
     # calculator request.  The model-generated patch must actually expose both
     # addition and subtraction behaviour, not merely mention a calculator.

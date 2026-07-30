@@ -70,7 +70,7 @@ class DockerSandbox(BaseSandbox):
         command: str,
         *,
         cwd: str = "/workspace",
-        timeout: int = 60,
+        timeout: int | None = None,
     ) -> CommandResult:
         """
         在 Docker 隔离容器中执行一条命令。
@@ -106,7 +106,7 @@ class DockerSandbox(BaseSandbox):
                 exit_code=result.exit_code if result.exit_code is not None else -1,
                 stdout=output,
                 stderr="",
-                timed_out=(duration_ms >= timeout * 1000),
+                timed_out=(timeout is not None and duration_ms >= timeout * 1000),
                 duration_ms=duration_ms,
                 warnings=warnings,
             )

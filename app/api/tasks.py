@@ -104,8 +104,8 @@ class CreateTaskRequest(BaseModel):
     repo_url: str = Field(description="代码仓库 URL")
     branch: str = Field(default="main", description="目标分支")
     max_iterations: int = Field(default=3, ge=1, le=10, description="最大迭代次数")
-    timeout_seconds: int = Field(
-        default=settings.TASK_TIMEOUT_SECONDS, ge=1, le=3600, description="任务总超时秒数"
+    timeout_seconds: int | None = Field(
+        default=settings.TASK_TIMEOUT_SECONDS, ge=0, description="任务总超时秒数；0 表示不限时"
     )
     budget_limit_usd: float | None = Field(
         default=None, ge=0, description="LLM 成本上限（美元）；不传则使用全局配置"
@@ -287,7 +287,8 @@ async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> 
     """后台运行图，使查询和取消 API 在任务执行期间仍可响应。"""
     config = {"configurable": {"thread_id": task_id}}
     try:
-        result = await asyncio.wait_for(_execute_task_pipeline(task_id, initial_state), timeout=timeout_seconds)
+        pipeline = _execute_task_pipeline(task_id, initial_state)
+        result = await asyncio.wait_for(pipeline, timeout=timeout_seconds) if timeout_seconds else await pipeline
         _tasks_store[task_id] = result
     except TimeoutError:
         state = await _checkpoint_state(task_id) or initial_state

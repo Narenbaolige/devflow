@@ -4,6 +4,12 @@ import os
 from dataclasses import dataclass, field
 
 
+def _timeout_setting(name: str, default: int) -> int | None:
+    """Treat zero or a negative value as an intentionally unlimited timeout."""
+    value = int(os.getenv(name, str(default)))
+    return value if value > 0 else None
+
+
 @dataclass
 class Settings:
     """DevFlow 全局配置。"""
@@ -41,7 +47,7 @@ class Settings:
 
     # Sandbox
     SANDBOX_MODE: str = os.getenv("SANDBOX_MODE", "local")
-    SANDBOX_TIMEOUT_SECONDS: int = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "300"))
+    SANDBOX_TIMEOUT_SECONDS: int | None = _timeout_setting("SANDBOX_TIMEOUT_SECONDS", 300)
 
     # Docker (仅 SANDBOX_MODE=docker 时生效)
     DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11")
@@ -50,8 +56,8 @@ class Settings:
 
     # Agent
     MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
-    AGENT_TIMEOUT_SECONDS: int = int(os.getenv("AGENT_TIMEOUT_SECONDS", "120"))
-    TASK_TIMEOUT_SECONDS: int = int(os.getenv("TASK_TIMEOUT_SECONDS", "900"))
+    AGENT_TIMEOUT_SECONDS: int | None = _timeout_setting("AGENT_TIMEOUT_SECONDS", 120)
+    TASK_TIMEOUT_SECONDS: int | None = _timeout_setting("TASK_TIMEOUT_SECONDS", 900)
     TASK_BUDGET_USD: float = float(os.getenv("TASK_BUDGET_USD", "0"))
     SSE_POLL_INTERVAL_MS: int = int(os.getenv("SSE_POLL_INTERVAL_MS", "500"))
 

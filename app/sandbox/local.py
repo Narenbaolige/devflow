@@ -51,7 +51,7 @@ class LocalSandbox(BaseSandbox):
         command: str,
         *,
         cwd: str = "/workspace",
-        timeout: int = 60,
+        timeout: int | None = None,
     ) -> CommandResult:
         """
         在本机执行一条 shell 命令。

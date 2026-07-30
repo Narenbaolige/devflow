@@ -16,6 +16,11 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 class ReviewerAgent(AgentBase):
 
+    # A fabricated approval defeats the quality gate. Surface upstream errors
+    # rather than accepting a Mock review in production mode.
+    FALLBACK_TO_MOCK_ON_ERROR = False
+    TIMEOUT_SECONDS = None
+
     @property
     def role(self) -> AgentRole:
         return AgentRole.REVIEWER

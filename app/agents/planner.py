@@ -21,7 +21,7 @@ class PlannerAgent(AgentBase):
     # Keep planning as a real LLM call; the Developer Agent receives tools
     # after the workspace is ready.
     ENABLE_TOOL_CALLING = False
-    TIMEOUT_SECONDS = 120
+    TIMEOUT_SECONDS = None
     FALLBACK_TO_MOCK_ON_ERROR = False
 
     @property

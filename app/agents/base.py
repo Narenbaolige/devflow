@@ -481,10 +481,9 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
     # 使取消、状态查询等请求仍可被处理。
     started_at = time.monotonic()
     try:
-        result = await asyncio.wait_for(
-            asyncio.to_thread(agent.invoke, state),
-            timeout=agent.TIMEOUT_SECONDS or settings.AGENT_TIMEOUT_SECONDS,
-        )
+        invocation = asyncio.to_thread(agent.invoke, state)
+        timeout = agent.TIMEOUT_SECONDS or settings.AGENT_TIMEOUT_SECONDS
+        result = await asyncio.wait_for(invocation, timeout=timeout) if timeout else await invocation
     except TimeoutError:
         # A blocking SDK call may still finish in its worker thread, but it can
         # no longer hold the workflow hostage.  Respect each agent's fallback
@@ -566,6 +565,30 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
             },
         })
 
+    # Do not continue a production workflow with missing or stale agent
+    # output. Continuing here used to let later nodes test the unmodified
+    # repository and report a misleading success.
+    if not result.success:
+        state["phase"] = "failed"
+        state.setdefault("errors", []).append({
+            "node": state.get("current_node") or agent_name,
+            "error_type": "agent_invocation",
+            "message": result.error or f"{agent_name} Agent 未返回有效结果",
+            "timestamp": datetime.now().isoformat(),
+            "recoverable": False,
+            "retry_count": result.invocation.retry_count if result.invocation else 0,
+        })
+        state.setdefault("events", []).append({
+            "event_id": str(uuid.uuid4()),
+            "task_id": state["task_meta"]["task_id"],
+            "event_type": "error",
+            "node_name": state.get("current_node", ""),
+            "timestamp": datetime.now().isoformat(),
+            "message": result.error or f"{agent_name} Agent 调用失败",
+            "data": {"phase": state.get("phase"), "agent": agent_name},
+        })
+        return state
+
     # 根据 Agent 角色写入不同字段
     field_map = {
         AgentRole.REQUIREMENT: "requirement_analysis",
@@ -583,7 +606,7 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
             # 因此直接存 PatchResult 字典而非 AgentResult 包装——否则 reducer
             # 找不到 file_path 字段，所有 patch 会被错误合并为一个。
             if result.success and result.result:
-                state[field] = [result.result]
+                state[field] = result.result.get("patches", [])
         else:
             state[field] = result.model_dump()
 

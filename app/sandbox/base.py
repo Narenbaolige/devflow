@@ -172,7 +172,7 @@ class BaseSandbox(ABC):
         command: str,
         *,
         cwd: str = "/workspace",
-        timeout: int = 60,
+        timeout: int | None = None,
     ) -> CommandResult:
         """
         执行一条命令，返回结果。

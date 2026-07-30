@@ -7,7 +7,7 @@ Developer Agent — 代码开发。
 from pathlib import Path
 
 from app.agents.base import AgentBase
-from contracts.agent_result import AgentResult, AgentRole, PatchResult
+from contracts.agent_result import AgentResult, AgentRole, PatchResult, PatchSetResult
 from contracts.state import TeamState
 
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
@@ -22,7 +22,7 @@ class DeveloperAgent(AgentBase):
     ENABLE_TOOL_CALLING = False
     # A unified diff can be substantially larger than a requirement analysis.
     # Do not turn a valid in-flight model response into a synthetic patch.
-    TIMEOUT_SECONDS = 120
+    TIMEOUT_SECONDS = None
     FALLBACK_TO_MOCK_ON_ERROR = False
     # Patch generation needs the actual target-file contents.  The base-agent
     # default (2K tokens) truncates that context and makes the model invent
@@ -35,6 +35,18 @@ class DeveloperAgent(AgentBase):
 
     def _load_system_prompt(self) -> str:
         base = (PROMPTS_DIR / "developer_agent.md").read_text("utf-8")
+        base += """
+
+## Delivery contract (non-negotiable)
+
+Return one complete `patches` array, with one PatchResult for every file that
+must change. Implement every acceptance criterion, not merely the first
+planning step. Include focused automated tests whenever behavior changes.
+Never use placeholder output, Hello World, TODO-only code, or claim a feature
+is implemented without executable behavior. For existing files, copy
+`original_snippet` verbatim from the supplied repository source. For new files,
+use `change_type: add` and an empty `original_snippet`.
+"""
         tools_guide = PROMPTS_DIR / "developer_tools.md"
         if self.ENABLE_TOOL_CALLING and tools_guide.exists():
             base += "\n\n" + tools_guide.read_text("utf-8")
@@ -42,12 +54,14 @@ class DeveloperAgent(AgentBase):
 
     @property
     def output_schema(self):
-        return PatchResult
+        return PatchSetResult
 
     def build_context(self, state: TeamState) -> str:
         meta = state.get("task_meta", {})
         plan = state.get("plan", {})
         plan_result = plan.get("result", {}) if plan else {}
+        requirement = state.get("requirement_analysis", {})
+        requirement_result = requirement.get("result", {}) if requirement else {}
         review = state.get("review", {})
         review_result = review.get("result", {}) if review else {}
 
@@ -56,6 +70,8 @@ class DeveloperAgent(AgentBase):
             f"分支：{meta.get('branch', 'main')}\n"
             f"技术方案：{plan_result.get('approach', '待规划')}\n"
             f"修改步骤：{plan_result.get('steps', [])}\n"
+            f"原始需求：{meta.get('requirement', '')}\n"
+            f"验收条件（必须全部满足）：{requirement_result.get('acceptance_criteria', [])}\n"
         )
         repository_context = state.get("repository_context") or ""
         if repository_context:
@@ -86,10 +102,11 @@ class DeveloperAgent(AgentBase):
         return AgentResult(
             agent_role=AgentRole.DEVELOPER,
             success=True,
-            result=PatchResult(
-                file_path="math_utils.py",
-                original_snippet="def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)",
-                patched_snippet=(
+            result=PatchSetResult(
+                patches=[PatchResult(
+                    file_path="math_utils.py",
+                    original_snippet="def factorial(n):\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)",
+                    patched_snippet=(
                     "def factorial(n):\n"
                     "    if not isinstance(n, int):\n"
                     "        raise TypeError('Input must be an integer')\n"
@@ -98,8 +115,8 @@ class DeveloperAgent(AgentBase):
                     "    if n == 0:\n"
                     "        return 1\n"
                     "    return n * factorial(n - 1)"
-                ),
-                diff=(
+                    ),
+                    diff=(
                     "--- a/math_utils.py\n"
                     "+++ b/math_utils.py\n"
                     "@@ -1,4 +1,8 @@\n"
@@ -111,9 +128,10 @@ class DeveloperAgent(AgentBase):
                     "     if n == 0:\n"
                     "         return 1\n"
                     "     return n * factorial(n - 1)"
-                ),
-                change_description="Mock: 为目标函数添加参数类型校验",
-                change_type="modify",
+                    ),
+                    change_description="Mock: 为目标函数添加参数类型校验",
+                    change_type="modify",
+                )]
             ).model_dump(),
             reasoning="Mock: 代码开发完成（Day 2 模式）",
         )
