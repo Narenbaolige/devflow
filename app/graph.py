@@ -74,10 +74,6 @@ def _blocked(state: TeamState, node_name: str) -> bool:
     return _cancelled(state, node_name) or _limits_exceeded(state, node_name)
 
 
-def _publish_branch(task_id: str) -> str:
-    """Return the dedicated remote branch for a task's verified changes."""
-    return f"devflow/{task_id}"
-
 
 async def _sandbox_call(sandbox, command: str, *, cwd: str = "/workspace", timeout: int | None = None):
     """在独立线程中调用沙箱命令，避免阻塞事件循环。"""
@@ -785,18 +781,24 @@ async def finalize(state: TeamState) -> TeamState:
 
         if state["task_meta"].get("publish_to_remote", False) and not state.get("cancel_requested", False):
             sandbox = get_sandbox(task_id)
-            branch = _publish_branch(task_id)
             status = await _sandbox_call(sandbox, "git status --porcelain", cwd="repo")
             if status.exit_code != 0 or not status.stdout.strip():
                 raise RuntimeError("没有可发布的代码变更")
 
+            # 获取远程默认分支（git 命令输出 "origin/main"，Python 侧截取分支名）
+            result = await _sandbox_call(
+                sandbox, "git symbolic-ref refs/remotes/origin/HEAD --short", cwd="repo"
+            )
+            raw = result.stdout.strip()  # e.g. "origin/main"
+            default_branch = raw.split("/", 1)[1] if "/" in raw else raw
+
             for command in (
-                f"git switch -c {branch}",
+                f"git checkout {default_branch}",
                 "git config user.name \"DevFlow Bot\"",
                 "git config user.email \"devflow@localhost\"",
                 "git add -A",
                 f"git commit -m \"DevFlow verified changes ({task_id})\"",
-                f"git push -u origin {branch}",
+                f"git push origin {default_branch}",
             ):
                 result = await _sandbox_call(sandbox, command, cwd="repo", timeout=120)
                 if result.exit_code != 0:
@@ -804,10 +806,10 @@ async def finalize(state: TeamState) -> TeamState:
 
             state["publication"] = {
                 "status": "pushed",
-                "branch": branch,
+                "branch": default_branch,
                 "repository": state["task_meta"]["repo_url"],
             }
-            _record_event(state, "progress", f"已推送验证通过的修改到分支 {branch}", "finalize")
+            _record_event(state, "progress", f"已推送验证通过的修改到默认分支 {default_branch}", "finalize")
 
         if not state.get("cancel_requested", False):
             state["phase"] = "done"

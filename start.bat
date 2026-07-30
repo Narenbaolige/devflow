@@ -49,5 +49,10 @@ echo   Backend:  http://localhost:8000/docs
 echo   Frontend: http://localhost:5173
 echo ========================================
 echo.
+echo Waiting for servers to start...
+timeout /t 3 /nobreak >nul
+start "" http://localhost:5173
+echo Browser launched.
+echo.
 echo Close each terminal window to stop.
 pause

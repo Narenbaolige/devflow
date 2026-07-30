@@ -8,19 +8,19 @@
 
 ## 核心能力
 
-| 能力 | 说明 |
-|------|------|
-| **多 Agent 协同** | 5 个专用 Agent（Requirement / Planner / Developer / Reviewer + 单 Agent 基线），各司其职 |
-| **完整流水线** | 12 节点 LangGraph 状态图：`init → analyze → plan → setup → develop → apply → test → review → security → finalize` |
-| **工具调用** | Developer & Planner 可调用 9 种沙箱工具（读文件、列目录、搜索、写文件、执行命令等），基于真实代码生成修改 |
-| **返工循环** | 测试失败或审查不通过时自动触发返工（≤3 次），Developer 根据 Reviewer 反馈修正代码 |
-| **中断审批** | 安全风险评估为高风险时暂停流水线，等待人工审批后继续 |
-| **实时事件** | SSE 端点实时推送每个节点的执行状态、Agent 调用结果、测试输出 |
-| **双模式运行** | Mock 模式零配置即可运行全流程；Real 模式接入 DeepSeek/OpenAI 真实生成代码 |
-| **沙箱隔离** | 代码修改和测试在独立沙箱中执行（默认本地 subprocess，可选 Docker 容器隔离） |
-| **Checkpoint 持久化** | 支持 Memory（开发）和 PostgreSQL（生产）两种后端，服务重启后可恢复任务 |
-| **前端界面** | React + TypeScript 前端，3 个页面（创建任务 / 任务详情 / 评测对比），SSE 实时更新 |
-| **评测体系** | 20 条标准化评测任务，覆盖 5 个类别 × 4 个难度级别，支持单/多 Agent 消融实验对比 |
+| 能力                        | 说明                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **多 Agent 协同**     | 5 个专用 Agent（Requirement / Planner / Developer / Reviewer + 单 Agent 基线），各司其职                                     |
+| **完整流水线**        | 12 节点 LangGraph 状态图：`init → analyze → plan → setup → develop → apply → test → review → security → finalize` |
+| **工具调用**          | Developer & Planner 可调用 9 种沙箱工具（读文件、列目录、搜索、写文件、执行命令等），基于真实代码生成修改                    |
+| **返工循环**          | 测试失败或审查不通过时自动触发返工（≤3 次），Developer 根据 Reviewer 反馈修正代码                                           |
+| **中断审批**          | 安全风险评估为高风险时暂停流水线，等待人工审批后继续                                                                         |
+| **实时事件**          | SSE 端点实时推送每个节点的执行状态、Agent 调用结果、测试输出                                                                 |
+| **双模式运行**        | Mock 模式零配置即可运行全流程；Real 模式接入 DeepSeek/OpenAI 真实生成代码                                                    |
+| **沙箱隔离**          | 代码修改和测试在独立沙箱中执行（默认本地 subprocess，可选 Docker 容器隔离）                                                  |
+| **Checkpoint 持久化** | 支持 Memory（开发）和 PostgreSQL（生产）两种后端，服务重启后可恢复任务                                                       |
+| **前端界面**          | React + TypeScript 前端，3 个页面（创建任务 / 任务详情 / 评测对比），SSE 实时更新                                            |
+| **评测体系**          | 20 条标准化评测任务，覆盖 5 个类别 × 4 个难度级别，支持单/多 Agent 消融实验对比                                             |
 
 ---
 
@@ -70,18 +70,18 @@
 
 ### 前置要求
 
-| 依赖 | 版本 | 说明 |
-|------|:----:|------|
-| Python | 3.11+ | — |
-| Git | 2.30+ | — |
-| Node.js | 18+ | 仅前端 |
-| LLM API Key | — | Mock 模式不需要；真实模式需 DeepSeek / OpenAI Key |
+| 依赖        | 版本 | 说明                                              |
+| ----------- | :---: | ------------------------------------------------- |
+| Python      | 3.11+ | —                                                |
+| Git         | 2.30+ | —                                                |
+| Node.js     |  18+  | 仅前端                                            |
+| LLM API Key |  —  | Mock 模式不需要；真实模式需 DeepSeek / OpenAI Key |
 
 > 默认无需 Docker。沙箱使用本地 subprocess，零额外依赖。
 
 ### 一键启动
 
-```bash
+```powershell
 # 1. 克隆
 git clone https://github.com/Narenbaolige/devflow.git
 cd devflow
@@ -91,13 +91,14 @@ python -m venv .venv
 .venv\Scripts\activate      # Windows
 python -m pip install -e ".[dev]"
 
-cd frontend && npm install && cd ..
+# 前端依赖安装
+cd frontend; npm install; cd ..
 
 # 3. 启动
-# Windows: 双击 start.bat
+# Windows: 双击 start.bat 或 ./start.ps1
 # 或手动：
 python -m app.run            # 后端 → http://localhost:8000
-cd frontend && npm run dev   # 前端 → http://localhost:5173
+cd frontend; npm run dev     # 前端 → http://localhost:5173
 ```
 
 ### LangGraph / LangChain Core 版本兼容性
@@ -267,13 +268,13 @@ devflow/
 
 ## Agent 体系
 
-| Agent | 角色 | 模型 | 工具调用 | 职责 |
-|-------|------|:--:|:--:|------|
-| **Requirement** | 需求分析师 | Prompt-only | — | 理解需求，提取受影响模块和验收条件，评估置信度 |
-| **Planner** | 方案架构师 | Prompt + Tools | ✅ | 浏览代码仓库，设计文件级实现方案，规划步骤依赖 |
-| **Developer** | 代码工程师 | Prompt + Tools | ✅ | 读取代码，生成 unified diff，通过沙箱自测验证 |
-| **Reviewer** | 代码审查员 | Prompt-only | — | 审查 patch 正确性、代码风格、安全漏洞（CWE） |
-| **SingleAgent** | 全栈工程师 | Prompt-only | — | 单 Agent 基线：独自完成分析→编码→自审（消融实验用） |
+| Agent                 | 角色       |      模型      | 工具调用 | 职责                                                  |
+| --------------------- | ---------- | :------------: | :------: | ----------------------------------------------------- |
+| **Requirement** | 需求分析师 |  Prompt-only  |    —    | 理解需求，提取受影响模块和验收条件，评估置信度        |
+| **Planner**     | 方案架构师 | Prompt + Tools |    ✅    | 浏览代码仓库，设计文件级实现方案，规划步骤依赖        |
+| **Developer**   | 代码工程师 | Prompt + Tools |    ✅    | 读取代码，生成 unified diff，通过沙箱自测验证         |
+| **Reviewer**    | 代码审查员 |  Prompt-only  |    —    | 审查 patch 正确性、代码风格、安全漏洞（CWE）          |
+| **SingleAgent** | 全栈工程师 |  Prompt-only  |    —    | 单 Agent 基线：独自完成分析→编码→自审（消融实验用） |
 
 ### 工具调用流程（Developer & Planner）
 
@@ -290,10 +291,10 @@ LLM 决策 → 调用工具 → 沙箱执行 → 返回结果 → LLM 分析 →
 
 ## 沙箱系统
 
-| 模式 | 实现 | 隔离级别 | 依赖 |
-|------|------|:--:|------|
-| **Local**（默认） | `subprocess.run()` | 进程级 | 无 |
-| **Docker** | Docker SDK (`docker run`) | 容器级 | Docker Desktop |
+| 模式                    | 实现                        | 隔离级别 | 依赖           |
+| ----------------------- | --------------------------- | :------: | -------------- |
+| **Local**（默认） | `subprocess.run()`        |  进程级  | 无             |
+| **Docker**        | Docker SDK (`docker run`) |  容器级  | Docker Desktop |
 
 ### 沙箱生命周期
 
@@ -314,17 +315,17 @@ create → git clone → [Developer 工具探索] → apply patches → pip inst
 
 ## API 端点
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/tasks` | 创建任务（需求 + 仓库 + 可选的超时/预算限制） |
-| `GET` | `/tasks` | 列出所有任务（支持 `?limit=&offset=` 分页） |
-| `GET` | `/tasks/stats` | 任务统计（阶段分布 / 平均迭代 / Token / 费用） |
-| `GET` | `/tasks/{id}` | 查询任务状态与完整结果 |
-| `GET` | `/tasks/{id}/events` | SSE 实时事件流 |
-| `POST` | `/tasks/{id}/approve` | 审批通过（含反馈） |
-| `POST` | `/tasks/{id}/reject` | 审批拒绝（触发返工） |
-| `POST` | `/tasks/{id}/cancel` | 协作式取消任务 |
-| `GET` | `/health` | 健康检查 |
+| 方法     | 路径                    | 说明                                           |
+| -------- | ----------------------- | ---------------------------------------------- |
+| `POST` | `/tasks`              | 创建任务（需求 + 仓库 + 可选的超时/预算限制）  |
+| `GET`  | `/tasks`              | 列出所有任务（支持`?limit=&offset=` 分页）   |
+| `GET`  | `/tasks/stats`        | 任务统计（阶段分布 / 平均迭代 / Token / 费用） |
+| `GET`  | `/tasks/{id}`         | 查询任务状态与完整结果                         |
+| `GET`  | `/tasks/{id}/events`  | SSE 实时事件流                                 |
+| `POST` | `/tasks/{id}/approve` | 审批通过（含反馈）                             |
+| `POST` | `/tasks/{id}/reject`  | 审批拒绝（触发返工）                           |
+| `POST` | `/tasks/{id}/cancel`  | 协作式取消任务                                 |
+| `GET`  | `/health`             | 健康检查                                       |
 
 ---
 
@@ -334,19 +335,19 @@ create → git clone → [Developer 工具探索] → apply patches → pip inst
 
 20 条标准化任务，覆盖 5 个类别 × 4 个难度级别：
 
-| 类别 | 数量 | 示例 |
-|------|:--:|------|
-| `simple_fix` | 5 | 添加参数校验、修复 import 路径、修正变量名 typo |
-| `bug_fix` | 5 | 除零保护、off-by-one、空列表处理 |
-| `refactor` | 5 | 提取校验函数、简化嵌套 if、拆分方法、提取常量 |
-| `feature` | 3 | 新增方法、重试机制、缓存装饰器 |
-| `edge_case` | 2 | Unicode 文件名、空输入处理 |
+| 类别           | 数量 | 示例                                            |
+| -------------- | :--: | ----------------------------------------------- |
+| `simple_fix` |  5  | 添加参数校验、修复 import 路径、修正变量名 typo |
+| `bug_fix`    |  5  | 除零保护、off-by-one、空列表处理                |
+| `refactor`   |  5  | 提取校验函数、简化嵌套 if、拆分方法、提取常量   |
+| `feature`    |  3  | 新增方法、重试机制、缓存装饰器                  |
+| `edge_case`  |  2  | Unicode 文件名、空输入处理                      |
 
 ### 消融实验
 
-| 组别 | 架构 | 返工 |
-|------|------|:--:|
-| **单 Agent 基线** | 1 个 SingleAgent 完成全流程（分析→编码→自审） | 无 |
+| 组别                    | 架构                                                            |  返工  |
+| ----------------------- | --------------------------------------------------------------- | :----: |
+| **单 Agent 基线** | 1 个 SingleAgent 完成全流程（分析→编码→自审）                 |   无   |
 | **多 Agent 管道** | 4 Agent 协同（Requirement → Planner → Developer → Reviewer） | ≤3 次 |
 
 ### 质量评估维度（8 维）
@@ -357,46 +358,46 @@ create → git clone → [Developer 工具探索] → apply patches → pip inst
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
+| 层级     | 技术                                                     |
+| -------- | -------------------------------------------------------- |
 | 编排引擎 | LangGraph (StateGraph + Checkpointer + interrupt_before) |
-| LLM 后端 | DeepSeek / OpenAI / ChatAnywhere（OpenAI 兼容协议） |
-| API 框架 | FastAPI + Pydantic v2 + SSE (sse-starlette) |
-| 前端 | React 18 + TypeScript + Vite + Recharts + CSS Modules |
-| 沙箱 | subprocess (Local) / Docker SDK (Docker) |
-| 持久化 | MemorySaver / AsyncPostgresSaver |
-| 代码质量 | ruff + mypy + pre-commit |
-| 测试 | pytest (310 core + 21 slow) |
+| LLM 后端 | DeepSeek / OpenAI / ChatAnywhere（OpenAI 兼容协议）      |
+| API 框架 | FastAPI + Pydantic v2 + SSE (sse-starlette)              |
+| 前端     | React 18 + TypeScript + Vite + Recharts + CSS Modules    |
+| 沙箱     | subprocess (Local) / Docker SDK (Docker)                 |
+| 持久化   | MemorySaver / AsyncPostgresSaver                         |
+| 代码质量 | ruff + mypy + pre-commit                                 |
+| 测试     | pytest (310 core + 21 slow)                              |
 
 ---
 
 ## 项目统计
 
-| 指标 | 数值 |
-|------|:--:|
-| Python 文件 | 70（~12,000 行） |
-| TypeScript 文件 | 19（~530 行） |
-| 测试 | 331（310 即时 + 21 慢速/网络依赖） |
-| Graph 节点 | 12 |
-| Agent | 5 |
-| 工具 | 9 |
-| 提示词文件 | 7 |
-| 前端页面 | 3 |
-| 前端组件 | 8 |
-| API 端点 | 9 |
-| 评测任务 | 20 |
-| 文档 | 16 |
+| 指标            |                数值                |
+| --------------- | :--------------------------------: |
+| Python 文件     |          70（~12,000 行）          |
+| TypeScript 文件 |           19（~530 行）           |
+| 测试            | 331（310 即时 + 21 慢速/网络依赖） |
+| Graph 节点      |                 12                 |
+| Agent           |                 5                 |
+| 工具            |                 9                 |
+| 提示词文件      |                 7                 |
+| 前端页面        |                 3                 |
+| 前端组件        |                 8                 |
+| API 端点        |                 9                 |
+| 评测任务        |                 20                 |
+| 文档            |                 16                 |
 
 ---
 
 ## 团队
 
-| 模块 | 负责人 | 核心工作 |
-|------|:--:|------|
-| 系统架构 & 工作流 | A | LangGraph 编排、API、State、Checkpointer、审批流程、运行时管控 |
-| Agent & Prompt & 工具 | B | 5 Agent、工具系统、Prompt 工程、LLM 集成、结构化输出 |
-| 执行环境 & 可靠性 | C | 沙箱（Local/Docker）、pytest 集成、Patch 应用、安全检测 |
-| 前端 & 系统评测 | D | React UI、SSE 实时更新、20 任务 Benchmark、消融实验 |
+| 模块                  | 负责人 | 核心工作                                                       |
+| --------------------- | :----: | -------------------------------------------------------------- |
+| 系统架构 & 工作流     |   A   | LangGraph 编排、API、State、Checkpointer、审批流程、运行时管控 |
+| Agent & Prompt & 工具 |   B   | 5 Agent、工具系统、Prompt 工程、LLM 集成、结构化输出           |
+| 执行环境 & 可靠性     |   C   | 沙箱（Local/Docker）、pytest 集成、Patch 应用、安全检测        |
+| 前端 & 系统评测       |   D   | React UI、SSE 实时更新、20 任务 Benchmark、消融实验            |
 
 ---
 

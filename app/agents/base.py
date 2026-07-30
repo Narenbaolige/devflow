@@ -38,7 +38,7 @@ class AgentBase(ABC):
     USE_MOCK: bool = os.getenv("DEVFLOW_USE_MOCK", "true").lower() == "true"
 
     # LLM 调用失败时是否自动降级为 Mock 输出（保证流程不中断）
-    FALLBACK_TO_MOCK_ON_ERROR: bool = True
+    FALLBACK_TO_MOCK_ON_ERROR: bool = False
     # Agents that generate larger artifacts may opt into a longer request
     # window than the lightweight analysis agents.
     TIMEOUT_SECONDS: int | None = None
@@ -444,6 +444,7 @@ class AgentBase(ABC):
                     result = validate_against_model(raw_text, self.output_schema)
                     evidence_error = self._tool_evidence_error(result, tool_call_count, read_files)
                     if evidence_error:
+                        last_error = f"证据不足: {evidence_error}"
                         validation_retries += 1
                         messages.append({
                             "role": "user",
@@ -521,6 +522,7 @@ class AgentBase(ABC):
                     result = validate_against_model(raw_text, self.output_schema)
                     evidence_error = self._tool_evidence_error(result, tool_call_count, read_files)
                     if evidence_error:
+                        last_error = f"证据不足: {evidence_error}"
                         validation_retries += 1
                         messages.append({
                             "role": "user",
@@ -539,7 +541,7 @@ class AgentBase(ABC):
                         reasoning=f"{self.role.value} Agent 调用完成（达最大工具轮次）",
                     )
                 except Exception as exc:
-                    last_error = exc
+                    last_error = str(exc)
                     validation_retries += 1
                     if attempt < 2:
                         fix_hint = getattr(exc, "fix_hint", str(exc))
@@ -551,7 +553,10 @@ class AgentBase(ABC):
                                 f"校验错误：{fix_hint}"
                             ),
                         })
-            raise RuntimeError(f"最终 JSON 在 3 次尝试后仍无效：{last_error}")
+            # 如果 3 次都因 evidence_error 走 continue，last_error 可能仍为 None
+            raise RuntimeError(
+                f"最终 JSON 在 3 次尝试后仍无效：{last_error or '缺少检索证据（未读取相关文件或工具调用不足）'}"
+            )
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
             if self.FALLBACK_TO_MOCK_ON_ERROR:
