@@ -63,9 +63,19 @@ export default function EvalCompare() {
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={BAR_DATA} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2EEEB" />
-              <XAxis dataKey="category" stroke="#9AAAA8" fontSize={12} />
+              <XAxis dataKey="category" stroke="#9AAAA8" fontSize={12}
+                tickFormatter={(v: string) =>
+                  v === "simple_fix" ? "简单修复" : v === "bug_fix" ? "Bug 修复" : v === "refactor" ? "重构" : v === "feature" ? "新功能" : "边界情况"
+                }
+              />
               <YAxis stroke="#9AAAA8" fontSize={12} domain={[0, 100]} unit="%" />
-              <Tooltip contentStyle={{ background: "#FFF", border: "1px solid #E2EEEB", borderRadius: 8 }} />
+              <Tooltip
+                contentStyle={{ background: "#FFF", border: "1px solid #E2EEEB", borderRadius: 8 }}
+                formatter={(value: unknown, name: unknown) => [
+                  `${value}%`,
+                  String(name) === "single" ? "单 Agent" : String(name) === "multi" ? "多 Agent" : String(name),
+                ]}
+              />
               <Legend />
               <Bar dataKey="single" name="单 Agent" fill="#9AAAA8" radius={[4,4,0,0]} />
               <Bar dataKey="multi" name="多 Agent" fill="#2FD98A" radius={[4,4,0,0]} />
@@ -84,6 +94,13 @@ export default function EvalCompare() {
               <PolarRadiusAxis stroke="#9AAAA8" fontSize={11} domain={[0, 100]} />
               <Radar name="单 Agent" dataKey="single" stroke="#9AAAA8" fill="#9AAAA8" fillOpacity={0.15} />
               <Radar name="多 Agent" dataKey="multi" stroke="#2FD98A" fill="#2FD98A" fillOpacity={0.25} />
+              <Tooltip
+                contentStyle={{ background: "#FFF", border: "1px solid #E2EEEB", borderRadius: 8 }}
+                formatter={(value: unknown, name: unknown) => [
+                  `${value}`,
+                  String(name) === "single" ? "单 Agent" : String(name) === "multi" ? "多 Agent" : String(name),
+                ]}
+              />
               <Legend />
             </RadarChart>
           </ResponsiveContainer>
