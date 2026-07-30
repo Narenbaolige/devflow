@@ -11,14 +11,14 @@
 | 能力                        | 说明                                                                                                                         |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **多 Agent 协同**     | 5 个专用 Agent（Requirement / Planner / Developer / Reviewer + 单 Agent 基线），各司其职                                     |
-| **完整流水线**        | 12 节点 LangGraph 状态图：`init → analyze → plan → setup → develop → apply → test → review → security → finalize` |
-| **工具调用**          | Developer & Planner 可调用 9 种沙箱工具（读文件、列目录、搜索、写文件、执行命令等），基于真实代码生成修改                    |
-| **返工循环**          | 测试失败或审查不通过时自动触发返工（≤3 次），Developer 根据 Reviewer 反馈修正代码                                           |
+| **完整流水线**        | 12 节点 LangGraph 状态图：`init → setup → analyze → plan → develop → apply → test → review → security → finalize` |
+| **返工循环**          | 测试失败/审查不通过时自动触发返工（≤5 次），Developer 获得测试断言详情、ERROR 诊断、趋势分析和累积历史反馈 |
+| **代码质量闸门**      | 语法检查（py_compile）、Patch 质量检测（重复定义/空 snippet）、自动依赖安装（从 import 提取）、JSON mode 强制合法输出 |
 | **中断审批**          | 安全风险评估为高风险时暂停流水线，等待人工审批后继续                                                                         |
 | **实时事件**          | SSE 端点实时推送每个节点的执行状态、Agent 调用结果、测试输出                                                                 |
 | **双模式运行**        | Mock 模式零配置即可运行全流程；Real 模式接入 DeepSeek/OpenAI 真实生成代码                                                    |
 | **沙箱隔离**          | 代码修改和测试在独立沙箱中执行（默认本地 subprocess，可选 Docker 容器隔离）                                                  |
-| **Checkpoint 持久化** | 支持 Memory（开发）和 PostgreSQL（生产）两种后端，服务重启后可恢复任务                                                       |
+| **推送部署**          | 验证通过后自动 `git commit` + `git push` 到仓库 main 分支 |
 | **前端界面**          | React + TypeScript 前端，3 个页面（创建任务 / 任务详情 / 评测对比），SSE 实时更新                                            |
 | **评测体系**          | 20 条标准化评测任务，覆盖 5 个类别 × 4 个难度级别，支持单/多 Agent 消融实验对比                                             |
 
@@ -40,10 +40,10 @@
 ┌──────────────────────▼──────────────────────────────────┐
 │                LangGraph StateGraph (12 nodes)            │
 │                                                          │
-│  init_task → analyze_requirement → plan_solution         │
-│       → setup_workspace → develop_changes → apply_patches│
-│       → run_tests → review_code → security_check         │
-│       → await_approval / finalize                        │
+│  init_task → setup_workspace → analyze_requirement            │
+│       → plan_solution → develop_changes → apply_patches        │
+│       → run_tests → review_code → security_check               │
+│       → await_approval / finalize                              │
 │                                                          │
 │  返工循环: review_code/test 失败 → develop_changes       │
 └──────────────────────┬──────────────────────────────────┘
@@ -52,9 +52,9 @@
 │                    Agents (5)                             │
 │  Requirement │ Planner │ Developer │ Reviewer │ Single    │
 │                                                          │
-│  LLM Backend: DeepSeek / OpenAI / ChatAnywhere           │
-│  Tool Calling: read_file / list_dir / grep / glob /      │
-│                write_file / edit_file / sandbox_execute   │
+│  LLM Backend: DeepSeek (默认) / OpenAI / ChatAnywhere      │
+│  输出模式: System Prompt + JSON mode (response_format)      │
+│  代码上下文: 80K 字符仓库快照（文件树 + 目标文件完整内容）  │
 └──────────────────────┬──────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────┐
@@ -127,21 +127,22 @@ py -3.12 -m venv .venv
 
 `langchain-core` 必须显示为 `1.x`。通过检查后再运行 `start.ps1` 或 `start.bat`。
 
-### Mock 模式（默认）
+### Mock 模式
 
-**无需配置任何 API Key**，开箱即用。Agent 返回预置数据，沙箱在内存中模拟执行，适合开发调试和 CI。
+无需配置 API Key，Agent 返回预置数据，适合快速验证流水线。
 
 ```bash
 # .env 中控制
-DEVFLOW_USE_MOCK=true    # Mock 模式（默认）
-DEVFLOW_USE_MOCK=false   # 真实 LLM 调用 + 真实沙箱执行
+DEVFLOW_USE_MOCK=true    # Mock 模式（跳过 LLM + 沙箱）
+DEVFLOW_USE_MOCK=false   # 真实模式（默认，需配置 API Key）
 ```
 
-### 真实模式
+### 真实模式（默认）
 
 ```bash
 cp .env.example .env
-# 编辑 .env：填入 DEEPSEEK_API_KEY，设置 DEVFLOW_USE_MOCK=false
+# 编辑 .env：填入 DEEPSEEK_API_KEY
+# DEVFLOW_USE_MOCK 默认为 false，无需额外设置
 ```
 
 ---
@@ -268,24 +269,15 @@ devflow/
 
 ## Agent 体系
 
-| Agent                 | 角色       |      模型      | 工具调用 | 职责                                                  |
-| --------------------- | ---------- | :------------: | :------: | ----------------------------------------------------- |
-| **Requirement** | 需求分析师 |  Prompt-only  |    —    | 理解需求，提取受影响模块和验收条件，评估置信度        |
-| **Planner**     | 方案架构师 | Prompt + Tools |    ✅    | 浏览代码仓库，设计文件级实现方案，规划步骤依赖        |
-| **Developer**   | 代码工程师 | Prompt + Tools |    ✅    | 读取代码，生成 unified diff，通过沙箱自测验证         |
-| **Reviewer**    | 代码审查员 |  Prompt-only  |    —    | 审查 patch 正确性、代码风格、安全漏洞（CWE）          |
-| **SingleAgent** | 全栈工程师 |  Prompt-only  |    —    | 单 Agent 基线：独自完成分析→编码→自审（消融实验用） |
+| Agent                 | 角色       |      输出模式      | 职责                                                  |
+| --------------------- | ---------- | :------------: | ----------------------------------------------------- |
+| **Requirement** | 需求分析师 |  System Prompt + JSON mode  | 理解需求，提取受影响模块和验收条件，评估置信度        |
+| **Planner**     | 方案架构师 | System Prompt + JSON mode | 两阶段生成：先分析仓库 FILE 清单确定目标文件，再设计方案 |
+| **Developer**   | 代码工程师 | System Prompt + JSON mode + 质量检测 | 生成 unified diff，语法检查 + 重复定义检测 + 自动依赖安装 |
+| **Reviewer**    | 代码审查员 |  System Prompt + JSON mode  | 按代码类型审查（新功能/Bug/重构），安全漏洞检测（CWE） |
+| **SingleAgent** | 全栈工程师 |  System Prompt + JSON mode  | 单 Agent 基线：独自完成分析→编码→自审（消融实验用） |
 
-### 工具调用流程（Developer & Planner）
-
-```
-LLM 决策 → 调用工具 → 沙箱执行 → 返回结果 → LLM 分析 → 下一轮 / 最终输出
-              │                                          │
-              └──── 最多 5 轮 ──────┘                    │
-              │                                          │
-    read_file / list_dir / grep / glob        结构化 JSON 输出（经验证）
-    write_file / edit_file / sandbox_execute
-```
+> **代码上下文**: Agent 通过 80K 字符仓库快照（文件树 + 目标文件完整内容）获取代码。工具调用框架已实现（9 种沙箱工具），当前默认 `DEVFLOW_ENABLE_TOOLS=false`。
 
 ---
 
@@ -299,9 +291,8 @@ LLM 决策 → 调用工具 → 沙箱执行 → 返回结果 → LLM 分析 →
 ### 沙箱生命周期
 
 ```
-create → git clone → [Developer 工具探索] → apply patches → pip install → pytest → cleanup
-  │                                                      │
-  └── 同一 task_id 复用实例（文件持久） ──────────────────┘
+create → git clone → 仓库快照(80K) → apply patches → py_compile 语法检查
+  → auto pip install(从 import 提取) → pytest → 返工或推送 main → cleanup
 ```
 
 ### 安全措施
@@ -367,7 +358,7 @@ create → git clone → [Developer 工具探索] → apply patches → pip inst
 | 沙箱     | subprocess (Local) / Docker SDK (Docker)                 |
 | 持久化   | MemorySaver / AsyncPostgresSaver                         |
 | 代码质量 | ruff + mypy + pre-commit                                 |
-| 测试     | pytest (310 core + 21 slow)                              |
+| 测试     | pytest (256 core, 全部即时通过)                              |
 
 ---
 
@@ -377,7 +368,7 @@ create → git clone → [Developer 工具探索] → apply patches → pip inst
 | --------------- | :--------------------------------: |
 | Python 文件     |          70（~12,000 行）          |
 | TypeScript 文件 |           19（~530 行）           |
-| 测试            | 331（310 即时 + 21 慢速/网络依赖） |
+| 测试            | 256（全部即时通过） |
 | Graph 节点      |                 12                 |
 | Agent           |                 5                 |
 | 工具            |                 9                 |

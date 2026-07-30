@@ -23,6 +23,7 @@ class PlannerAgent(AgentBase):
     # designing its implementation plan — target_files become grounded in the
     # actual project structure instead of guessed.
     ENABLE_TOOL_CALLING = os.getenv("DEVFLOW_ENABLE_TOOLS", "true").lower() == "true"
+    REQUIRE_TOOL_CALLING = True
     TIMEOUT_SECONDS = None
     FALLBACK_TO_MOCK_ON_ERROR = False
 

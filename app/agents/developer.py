@@ -22,6 +22,7 @@ class DeveloperAgent(AgentBase):
     # degrades gracefully: it retries without tool definitions first, then
     # falls back to the static repository_context snapshot.
     ENABLE_TOOL_CALLING = os.getenv("DEVFLOW_ENABLE_TOOLS", "true").lower() == "true"
+    REQUIRE_READ_FOR_EXISTING_PATCHES = True
     # A unified diff can be substantially larger than a requirement analysis.
     # Do not turn a valid in-flight model response into a synthetic patch.
     TIMEOUT_SECONDS = None
