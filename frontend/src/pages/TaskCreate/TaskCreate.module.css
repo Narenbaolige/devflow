@@ -63,7 +63,7 @@
 .submitBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .recentSection { margin-top: 44px; padding-top: 24px; border-top: 1px solid rgba(0,0,0,0.06); }
-.recentSection h3 { font-family: var(--font-brand); font-size: 17px; font-weight: 700; margin: 0 0 14px; }
+.recentSection h3 { font-family: var(--font-brand); font-size: 17px; font-weight: 700; margin: 0 0 14px; color: var(--text-primary); }
 .recentList { display: flex; flex-direction: column; gap: 6px; }
 .recentItem {
   display: flex; align-items: center; gap: 14px; padding: 12px 16px;

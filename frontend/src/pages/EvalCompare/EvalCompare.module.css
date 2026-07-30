@@ -1,6 +1,6 @@
 .container { max-width: 960px; margin: 0 auto; position: relative; z-index: 2; }
 .header { margin-bottom: 32px; }
-.header h1 { font-family: var(--font-brand); font-size: 32px; font-weight: 700; margin-bottom: 6px; letter-spacing: -.6px; }
+.header h1 { font-family: var(--font-brand); font-size: 32px; font-weight: 700; margin-bottom: 6px; letter-spacing: -.6px; color: var(--text-primary); }
 .header p { color: var(--text-secondary); font-size: 14px; }
 .statsRow { display: flex; gap: 14px; margin-bottom: 32px; flex-wrap: wrap; }
 
@@ -9,7 +9,7 @@
   border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
   border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
 }
-.section h3 { font-family: var(--font-brand); font-size: 17px; font-weight: 700; margin: 0 0 18px; }
+.section h3 { font-family: var(--font-brand); font-size: 17px; font-weight: 700; margin: 0 0 18px; color: var(--text-primary); }
 
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { padding: 10px 16px; text-align: left; font-size: 13px; border-bottom: 1px solid rgba(0,0,0,0.05); }
