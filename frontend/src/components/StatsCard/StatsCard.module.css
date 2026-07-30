@@ -6,6 +6,24 @@
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
-.label { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
-.value { font-family: var(--font-brand); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.8px; line-height: 1; }
-.unit { font-size: 13px; font-weight: 500; color: var(--text-muted); margin-left: 3px; }
+
+.label {
+  font-size: 11px;
+  color: #3D4347;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+}
+
+.value {
+  font-family: var(--font-brand);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.8px;
+  line-height: 1;
+  color: #121517;
+}
+
+.unit { font-size: 13px; font-weight: 500; color: #4A5054; margin-left: 3px; }
