@@ -1,30 +1,36 @@
 .container { max-width: 960px; margin: 0 auto; }
 
-.container h1 { font-size: 32px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.8px; line-height: 1.15; }
-.subtitle { color: var(--text-secondary); margin-bottom: 32px; font-size: 15px; }
+.header { margin-bottom: 32px; }
 
-.statsRow { display: flex; gap: 14px; margin-bottom: 32px; }
+.header h1 {
+  font-family: var(--font-brand); font-size: 32px;
+  font-weight: 700; margin-bottom: 6px; letter-spacing: -.6px;
+}
+.header p { color: var(--text-secondary); font-size: 14px; }
+
+.statsRow { display: flex; gap: 14px; margin-bottom: 32px; flex-wrap: wrap; }
 
 .section {
   background: var(--bg-card); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
 }
-.section h3 { margin: 0 0 18px; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.section h3 {
+  font-family: var(--font-brand); font-size: 17px;
+  font-weight: 700; margin: 0 0 18px; letter-spacing: -.3px;
+}
 
 .table { width: 100%; border-collapse: collapse; }
-.table th, .table td { padding: 11px 16px; text-align: left; font-size: 14px; border-bottom: 1px solid var(--border-subtle); }
-.table th { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.6px; }
-.metricName { font-weight: 600; }
-.winner { color: var(--success); font-weight: 600; }
-.gain { font-family: monospace; font-weight: 600; color: var(--accent); font-size: 13px; }
+.table th, .table td { padding: 10px 16px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border-subtle); }
+.table th { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: .5px; font-family: var(--font-ui); }
+.metricName { font-weight: 600; font-family: var(--font-ui); }
+.winner { color: var(--accent-strong); font-weight: 600; }
+.gain { font-family: var(--font-mono); font-weight: 600; color: var(--blue); font-size: 12px; }
 
 .chartBox {
-  background: var(--bg-input); border: 1px solid var(--border-subtle);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm); padding: 20px;
 }
 
 .findings { display: flex; flex-direction: column; gap: 18px; }
-.finding { display: flex; gap: 14px; }
-.findingIcon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
-.finding strong { display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px; font-weight: 600; }
+.finding strong { display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px; font-weight: 600; font-family: var(--font-ui); }
 .finding p { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.55; }

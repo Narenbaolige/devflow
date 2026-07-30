@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default function StatusBadge({ phase }: Props) {
-  const config = PHASE_CONFIG[phase] ?? { label: phase, color: "#8b949e" };
+  const config = PHASE_CONFIG[phase] ?? { label: phase, color: "#9AAAA8" };
   return (
     <span className={styles.badge} style={{ "--badge-color": config.color } as React.CSSProperties}>
       {config.label}

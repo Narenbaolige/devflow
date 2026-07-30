@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Send, ChevronDown } from "lucide-react";
 import { createTask, listTasks } from "../../services/api";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
 import type { TaskResponse } from "../../types/task";
 import styles from "./TaskCreate.module.css";
 
 const DEFAULT_VALUES = {
-  repo_url: "https://github.com/Narenbaolige/devflow-test-repo",  // bubble sort + 8 tests
+  repo_url: "https://github.com/Narenbaolige/devflow-test-repo",
   branch: "main",
-  max_iterations: 5,
+  max_iterations: 3,
   timeout_seconds: 900,
 };
 
@@ -20,23 +21,21 @@ export default function TaskCreate() {
   const [maxIterations, setMaxIterations] = useState(DEFAULT_VALUES.max_iterations);
   const [timeoutSeconds, setTimeoutSeconds] = useState(DEFAULT_VALUES.timeout_seconds);
   const [budgetLimit, setBudgetLimit] = useState("");
-  const [publishToRemote, setPublishToRemote] = useState(false);
+  const [publishToRemote, setPublishToRemote] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentTasks, setRecentTasks] = useState<TaskResponse[]>([]);
 
-  // Load recent tasks
   useEffect(() => {
     listTasks(5, 0)
       .then((res) => setRecentTasks(res.tasks))
-      .catch(() => { /* ignore */ });
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!requirement.trim()) { setError("请输入需求描述"); return; }
-    if (!repoUrl.trim()) { setError("请输入仓库 URL"); return; }
-
+    if (!requirement.trim()) { setError("Please describe your requirement"); return; }
+    if (!repoUrl.trim()) { setError("Please enter a repository URL"); return; }
     setSubmitting(true);
     setError(null);
     try {
@@ -51,7 +50,7 @@ export default function TaskCreate() {
       });
       navigate(`/tasks/${task.task_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "创建失败，请检查后端");
+      setError(err instanceof Error ? err.message : "Failed to create task");
     } finally {
       setSubmitting(false);
     }
@@ -59,69 +58,87 @@ export default function TaskCreate() {
 
   return (
     <div className={styles.container}>
+      {/* 渐变装饰 */}
+      <div className={styles.gradientBar} />
+
       <div className={styles.header}>
-        <h1>创建新任务</h1>
-        <p>描述你的需求，系统将自动完成分析 → 规划 → 编码 → 测试 → 审查</p>
+        <h1>Start a new task</h1>
+        <p>Describe what you need — the agent pipeline will analyze, plan, code, test, and review automatically.</p>
       </div>
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <div className={styles.field}>
-          <label className={styles.label}>需求描述 <span className={styles.required}>*</span></label>
-          <textarea className={styles.textarea} value={requirement} onChange={(e) => setRequirement(e.target.value)}
-            placeholder="例如：给 factorial 函数添加参数校验" rows={4} disabled={submitting} />
+          <label className={styles.label}>Requirement</label>
+          <textarea className={styles.textarea} value={requirement}
+            onChange={(e) => setRequirement(e.target.value)}
+            placeholder="e.g. Add input validation to the factorial function"
+            rows={3} disabled={submitting} />
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>仓库 URL <span className={styles.required}>*</span></label>
-          <input className={styles.input} type="text" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)}
+          <label className={styles.label}>Repository URL</label>
+          <input className={styles.input} type="text" value={repoUrl}
+            onChange={(e) => setRepoUrl(e.target.value)}
             placeholder="https://github.com/..." disabled={submitting} />
         </div>
 
         <details className={styles.advanced}>
-          <summary className={styles.advancedTitle}>⚙️ 高级选项</summary>
+          <summary className={styles.advancedTitle}>
+            <ChevronDown size={14} /> Advanced options
+          </summary>
           <div className={styles.advancedGrid}>
             <div className={styles.field}>
-              <label className={styles.label}>目标分支</label>
-              <input className={styles.input} type="text" value={branch} onChange={(e) => setBranch(e.target.value)} disabled={submitting} />
+              <label className={styles.label}>Branch</label>
+              <input className={styles.input} type="text" value={branch}
+                onChange={(e) => setBranch(e.target.value)} disabled={submitting} />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>最大迭代次数</label>
-              <input className={styles.input} type="number" min={1} max={10} value={maxIterations} onChange={(e) => setMaxIterations(Number(e.target.value))} disabled={submitting} />
+              <label className={styles.label}>Max iterations</label>
+              <input className={styles.input} type="number" min={1} max={10}
+                value={maxIterations} onChange={(e) => setMaxIterations(Number(e.target.value))}
+                disabled={submitting} />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>超时时间（秒）</label>
-              <input className={styles.input} type="number" min={1} max={3600} value={timeoutSeconds} onChange={(e) => setTimeoutSeconds(Number(e.target.value))} disabled={submitting} />
+              <label className={styles.label}>Timeout (seconds)</label>
+              <input className={styles.input} type="number" min={1} max={3600}
+                value={timeoutSeconds} onChange={(e) => setTimeoutSeconds(Number(e.target.value))}
+                disabled={submitting} />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>预算上限（美元）</label>
-              <input className={styles.input} type="number" min={0} step={0.001} value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} placeholder="不限制" disabled={submitting} />
+              <label className={styles.label}>Budget limit (USD)</label>
+              <input className={styles.input} type="number" min={0} step={0.001}
+                value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)}
+                placeholder="Unlimited" disabled={submitting} />
             </div>
           </div>
           <label className={styles.publishOption}>
             <input type="checkbox" checked={publishToRemote}
               onChange={(e) => setPublishToRemote(e.target.checked)} disabled={submitting} />
-            验证通过后提交并推送到远程新分支
+            Push to remote repository after verification
           </label>
         </details>
 
         {error && <div className={styles.error}>{error}</div>}
 
         <button className={styles.submitBtn} type="submit" disabled={submitting}>
-          {submitting ? <><span className={styles.spinner} />正在创建...</> : "🚀 创建任务"}
+          <Send size={16} />
+          {submitting ? "Creating..." : "Create task"}
         </button>
       </form>
 
-      {/* 最近任务 — 解决导航后找不到之前任务的问题 */}
       {recentTasks.length > 0 && (
         <div className={styles.recentSection}>
-          <h3>最近任务</h3>
+          <h3>Recent tasks</h3>
           <div className={styles.recentList}>
             {recentTasks.map((t) => (
-              <div key={t.task_id} className={styles.recentItem} onClick={() => navigate(`/tasks/${t.task_id}`)}>
+              <div key={t.task_id} className={styles.recentItem}
+                onClick={() => navigate(`/tasks/${t.task_id}`)}>
                 <span className={styles.recentId}>#{t.task_id}</span>
                 <StatusBadge phase={t.phase} />
-                <span className={styles.recentReq}>{t.requirement.slice(0, 40)}{t.requirement.length > 40 ? "..." : ""}</span>
-                <span className={styles.recentTime}>{formatTime(t.created_at)}</span>
+                <span className={styles.recentReq}>
+                  {t.requirement.slice(0, 45)}{t.requirement.length > 45 ? "…" : ""}
+                </span>
+                <span className={styles.recentTime}>{fmtTime(t.created_at)}</span>
               </div>
             ))}
           </div>
@@ -131,9 +148,9 @@ export default function TaskCreate() {
   );
 }
 
-function formatTime(iso: string): string {
+function fmtTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
   } catch { return ""; }
 }

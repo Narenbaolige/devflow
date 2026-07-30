@@ -5,40 +5,63 @@ import App from "./App";
 const style = document.createElement("style");
 style.textContent = `
   :root {
-    --bg-root: #000000;
-    --bg-surface: #0c0c0d;
-    --bg-card: #141416;
-    --bg-card-hover: #1a1a1d;
-    --bg-input: #0f0f10;
-    --border-subtle: #1e1e22;
-    --border-default: #2a2a30;
-    --border-strong: #3a3a42;
-    --text-primary: #fafafa;
-    --text-secondary: #a0a0a8;
-    --text-muted: #6b6b75;
-    --accent: #4d94ff;
-    --accent-strong: #6aa8ff;
-    --accent-subtle: rgba(77, 148, 255, 0.08);
-    --accent-glow: rgba(77, 148, 255, 0.15);
-    --success: #36c95a;
-    --success-subtle: rgba(54, 201, 90, 0.08);
-    --danger: #f1464e;
-    --danger-subtle: rgba(241, 70, 78, 0.08);
-    --warning: #e8a838;
-    --warning-subtle: rgba(232, 168, 56, 0.08);
-    --purple: #8b6bf7;
+    /* ── 背景 ── */
+    --bg-root: #F5F9F8;
+    --bg-surface: #EDF4F2;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F7FBFA;
+    --bg-input: #F7FBFA;
+
+    /* ── 边框 ── */
+    --border-subtle: #E2EEEB;
+    --border-default: #D0E0DC;
+    --border-strong: #B8CFC9;
+
+    /* ── 文字 ── */
+    --text-primary: #1F2A2E;
+    --text-secondary: #6B7B7A;
+    --text-muted: #9AAAA8;
+
+    /* ── 强调色 ── */
+    --accent: #2FD98A;
+    --accent-strong: #22C57A;
+    --accent-subtle: rgba(47, 217, 138, 0.08);
+    --accent-glow: rgba(47, 217, 138, 0.2);
+
+    /* ── 次强调色（天蓝） ── */
+    --blue: #5B8DEF;
+    --blue-subtle: rgba(91, 141, 239, 0.08);
+    --blue-glow: rgba(91, 141, 239, 0.15);
+
+    /* ── 语义色 ── */
+    --success: #2FD98A;
+    --success-subtle: rgba(47, 217, 138, 0.08);
+    --danger: #F0556B;
+    --danger-subtle: rgba(240, 85, 107, 0.08);
+    --warning: #F5A623;
+    --warning-subtle: rgba(245, 166, 35, 0.08);
+
+    /* ── 圆角 ── */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+
+    /* ── 阴影 ── */
+    --shadow-xs: 0 1px 2px rgba(31, 42, 46, 0.04);
+    --shadow-sm: 0 2px 8px rgba(31, 42, 46, 0.06);
+    --shadow-md: 0 8px 24px rgba(31, 42, 46, 0.08);
+    --shadow-lg: 0 16px 40px rgba(31, 42, 46, 0.1);
+
+    /* ── 字体 ── */
+    --font-brand: "Plus Jakarta Sans", sans-serif;
+    --font-ui: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    font-family: var(--font-ui);
     background: var(--bg-root);
     color: var(--text-primary);
     line-height: 1.6;
@@ -46,9 +69,10 @@ style.textContent = `
     min-height: 100vh;
   }
 
-  a { color: var(--accent); text-decoration: none; }
+  a { color: var(--blue); text-decoration: none; }
   code, pre, .mono {
-    font-family: "JetBrains Mono", "Fira Code", "SF Mono", "Consolas", monospace;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
