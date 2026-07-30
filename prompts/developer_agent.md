@@ -113,6 +113,13 @@
 
 **重要**：`file_path` 只写文件名（相对路径），不要拼接仓库地址或本地绝对路径。
 
+**文件组织规则**：
+- 对于**新建项目/新功能**（如游戏、聊天机器人、工具库），将所有相关文件放入一个以项目名命名的文件夹中
+- 复杂项目可在该文件夹内自行创建子目录（如 `myproject/src/`、`myproject/tests/`）
+- 示例：五子棋 → `gomoku/gomoku.py` + `gomoku/test_gomoku.py`
+- 示例：聊天机器人 → `chatbot/chat_bot.py` + `chatbot/config.py` + `chatbot/requirements.txt`
+- 修改已有文件时，保持其现有目录结构不变
+
 ## 返工修复指南（至关重要）
 
 如果你收到返工标记的上下文，说明上一轮代码有测试失败：
