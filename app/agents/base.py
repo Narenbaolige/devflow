@@ -487,16 +487,33 @@ async def agent_node(state: TeamState, agent: AgentBase) -> TeamState:
         )
     except TimeoutError:
         # A blocking SDK call may still finish in its worker thread, but it can
-        # no longer hold the workflow hostage.  Preserve the existing fallback
-        # policy so downstream nodes receive a valid, visible result.
-        result = agent.mock_result(state)
-        result.reasoning = "[FALLBACK] Agent 调用超时，已降级为 Mock 输出"
-        result.invocation = AgentInvocation(
-            agent_role=agent.role,
-            model="mock-fallback",
-            retry_count=1,
-            duration_ms=int((time.monotonic() - started_at) * 1000),
-        )
+        # no longer hold the workflow hostage.  Respect each agent's fallback
+        # policy: production agents must expose the upstream timeout instead of
+        # silently fabricating a Mock result.
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        if agent.FALLBACK_TO_MOCK_ON_ERROR:
+            result = agent.mock_result(state)
+            result.reasoning = "[FALLBACK] Agent 调用超时，已降级为 Mock 输出"
+            result.invocation = AgentInvocation(
+                agent_role=agent.role,
+                model="mock-fallback",
+                retry_count=1,
+                duration_ms=duration_ms,
+            )
+        else:
+            result = AgentResult(
+                agent_role=agent.role,
+                success=False,
+                error=f"Agent 调用超时（{agent.TIMEOUT_SECONDS or settings.AGENT_TIMEOUT_SECONDS} 秒）",
+                invocation=AgentInvocation(
+                    agent_role=agent.role,
+                    model=getattr(agent, "model", "unknown"),
+                    retry_count=1,
+                    duration_ms=duration_ms,
+                ),
+                reasoning="调用超时",
+                next_action="retry",
+            )
 
     # ── P3: 调用后检查 — 调用期间被取消则不写入产出物 ──
     if state.get("cancel_requested"):

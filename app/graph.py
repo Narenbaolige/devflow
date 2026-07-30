@@ -190,14 +190,21 @@ async def setup_workspace(state: TeamState) -> TeamState:
         import tempfile as _tempfile
         from pathlib import Path as _Path
 
+        target_files = []
+        for step in (state.get("plan") or {}).get("result", {}).get("steps", []):
+            target_files.extend(step.get("target_files", []))
+
         snapshot_script = _Path(_tempfile.gettempdir()) / f"devflow-snapshot-{task_id}.py"
-        snapshot_script.write_text('''\
+        snapshot_source = '''\
 import subprocess
 from pathlib import Path
 
-budget = 12_000
+targets = __TARGET_FILES__
+budget = 30_000
 parts = []
-for relative_path in subprocess.check_output(["git", "ls-files"], text=True).splitlines():
+all_paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+# Put Planner-selected files first so the Developer sees their exact contents.
+for relative_path in sorted(all_paths, key=lambda item: (item not in targets, item)):
     path = Path(relative_path)
     try:
         if path.stat().st_size > 50_000:
@@ -205,14 +212,18 @@ for relative_path in subprocess.check_output(["git", "ls-files"], text=True).spl
         content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         continue
-    parts.append(f"FILE: {relative_path}\\n{content[:3_000]}")
+    parts.append(f"FILE: {relative_path}\\n{content[:6_000]}")
     if sum(len(part) for part in parts) >= budget:
         break
 print("\\n\\n---\\n\\n".join(parts)[:budget])
-''', encoding="utf-8")
+'''
+        snapshot_script.write_text(
+            snapshot_source.replace("__TARGET_FILES__", repr(target_files)),
+            encoding="utf-8",
+        )
         snapshot = await _sandbox_call(sandbox, f"python {snapshot_script}", cwd="repo", timeout=20)
         snapshot_script.unlink(missing_ok=True)
-        state["repository_context"] = snapshot.stdout[:12_000] if snapshot.exit_code == 0 else ""
+        state["repository_context"] = snapshot.stdout[:30_000] if snapshot.exit_code == 0 else ""
         _record_event(state, "node_complete", "工作区准备完成，仓库已 clone", "setup_workspace")
     except asyncio.CancelledError:
         state["phase"] = "cancelled"
@@ -395,13 +406,18 @@ for line_idx, cl in enumerate(content_lines):
 
 # Phase 3: 函数级替换 — 通过函数名定位并替换整个函数体
 # 从 original_snippet 中提取第一个 def/class 行
-func_match = re.search(r'^(\\s*)(?:def|class)\\s+(\\w+)', original, re.MULTILINE)
+func_match = re.search(r'^(\\s*)(?:async\\s+)?(?:def|class)\\s+(\\w+)', original, re.MULTILINE)
+if not func_match:
+    # The model may have an outdated original snippet, but the replacement
+    # usually retains the target function name. Use it as a bounded fallback
+    # within the already-validated target file.
+    func_match = re.search(r'^(\\s*)(?:async\\s+)?(?:def|class)\\s+(\\w+)', patched, re.MULTILINE)
 if func_match:
     indent = func_match.group(1)
     func_name = func_match.group(2)
     # 在目标文件中查找同名函数/类定义
     target_pattern = re.compile(
-        r'^(' + re.escape(indent) + r'(?:def|class)\\s+' + re.escape(func_name) + r'\\b.*)$',
+        r'^(' + re.escape(indent) + r'(?:async\\s+)?(?:def|class)\\s+' + re.escape(func_name) + r'\\b.*)$',
         re.MULTILINE
     )
     tm = target_pattern.search(content)
@@ -411,7 +427,7 @@ if func_match:
         # 找到函数结束位置（下一个同级 def/class 或 EOF）
         end_line = len(lines)
         for k in range(func_start_line + 1, len(lines)):
-            if re.match(r'^' + re.escape(indent) + r'(?:def|class)\\s+\\w+', lines[k]):
+            if re.match(r'^' + re.escape(indent) + r'(?:async\\s+)?(?:def|class)\\s+\\w+', lines[k]):
                 end_line = k
                 break
             # 同级或更外层非空行（非缩进行）也结束

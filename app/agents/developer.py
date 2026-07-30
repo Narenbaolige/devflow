@@ -24,6 +24,10 @@ class DeveloperAgent(AgentBase):
     # Do not turn a valid in-flight model response into a synthetic patch.
     TIMEOUT_SECONDS = 120
     FALLBACK_TO_MOCK_ON_ERROR = False
+    # Patch generation needs the actual target-file contents.  The base-agent
+    # default (2K tokens) truncates that context and makes the model invent
+    # snippets which cannot be applied.
+    max_context_tokens = 8_000
 
     @property
     def role(self) -> AgentRole:
