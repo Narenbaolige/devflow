@@ -1,12 +1,12 @@
-.wrapper { min-height: 100vh; }
+.wrapper { min-height: 100vh; position: relative; z-index: 1; }
 
 .nav {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 32px; height: 56px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: rgba(255,255,255,0.7);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
   position: sticky; top: 0; z-index: 100;
 }
 
@@ -17,27 +17,27 @@
   background: linear-gradient(135deg, var(--accent), #22C57A);
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .logoIcon { color: #fff; stroke-width: 2.5; }
 
 .title {
-  font-family: var(--font-brand);
-  font-size: 17px; font-weight: 700;
-  letter-spacing: -0.3px; color: var(--text-primary);
+  font-family: var(--font-brand); font-size: 17px;
+  font-weight: 700; letter-spacing: -0.3px; color: var(--text-primary);
 }
 
 .subtitle {
   font-size: 11px; color: var(--text-muted);
-  padding-left: 10px; border-left: 1px solid var(--border-default);
+  padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.12);
   font-weight: 500;
 }
 
 .links {
   display: flex; align-items: center; gap: 2px;
-  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--glass-border);
   border-radius: 10px; padding: 3px;
+  backdrop-filter: blur(8px);
 }
 
 .link {
@@ -47,12 +47,11 @@
   display: flex; align-items: center; gap: 6px;
   transition: all 0.15s;
 }
-.link:hover { color: var(--text-primary); }
+.link:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
 
 .active {
-  color: var(--accent-strong) !important;
+  color: var(--accent) !important;
   background: var(--accent-subtle);
-  box-shadow: var(--shadow-xs);
 }
 
-.main { max-width: 1280px; margin: 0 auto; padding: 36px 32px; }
+.main { max-width: 1280px; margin: 0 auto; padding: 36px 32px; position: relative; z-index: 1; }

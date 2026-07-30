@@ -1,7 +1,6 @@
-.container { max-width: 960px; margin: 0 auto; }
+.container { max-width: 960px; margin: 0 auto; position: relative; z-index: 1; }
 
 .header { margin-bottom: 32px; }
-
 .header h1 {
   font-family: var(--font-brand); font-size: 32px;
   font-weight: 700; margin-bottom: 6px; letter-spacing: -.6px;
@@ -11,26 +10,23 @@
 .statsRow { display: flex; gap: 14px; margin-bottom: 32px; flex-wrap: wrap; }
 
 .section {
-  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  background: var(--bg-solid); border: 1px solid var(--border-default);
   border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
 }
-.section h3 {
-  font-family: var(--font-brand); font-size: 17px;
-  font-weight: 700; margin: 0 0 18px; letter-spacing: -.3px;
-}
+.section h3 { font-family: var(--font-brand); font-size: 17px; font-weight: 700; margin: 0 0 18px; letter-spacing: -.3px; }
 
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { padding: 10px 16px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border-subtle); }
-.table th { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: .5px; font-family: var(--font-ui); }
-.metricName { font-weight: 600; font-family: var(--font-ui); }
-.winner { color: var(--accent-strong); font-weight: 600; }
+.table th { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: .5px; }
+.metricName { font-weight: 600; }
+.winner { color: var(--accent); font-weight: 600; }
 .gain { font-family: var(--font-mono); font-weight: 600; color: var(--blue); font-size: 12px; }
 
 .chartBox {
-  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  background: var(--bg-input); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm); padding: 20px;
 }
 
 .findings { display: flex; flex-direction: column; gap: 18px; }
-.finding strong { display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px; font-weight: 600; font-family: var(--font-ui); }
+.finding strong { display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px; font-weight: 600; }
 .finding p { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.55; }

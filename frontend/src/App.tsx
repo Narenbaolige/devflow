@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ToastProvider } from "./components/Toast/ToastContext";
+import RainEffect from "./components/RainEffect/RainEffect";
 import Layout from "./components/Layout/Layout";
 import TaskCreate from "./pages/TaskCreate/TaskCreate";
 import TaskDetail from "./pages/TaskDetail/TaskDetail";
@@ -9,6 +10,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
+        <RainEffect />
         <Layout>
           <Routes>
             <Route path="/" element={<TaskCreate />} />
