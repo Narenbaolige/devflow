@@ -31,7 +31,7 @@ class DeveloperAgent(AgentBase):
     # default (2K tokens) truncates that context and makes the model invent
     # snippets which cannot be applied.  Bumped to 32K so tool-call history
     # and repository context fit alongside the system prompt and plan data.
-    max_context_tokens = 32_000
+    max_context_tokens = 56_000
 
     @property
     def role(self) -> AgentRole:
