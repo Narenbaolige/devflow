@@ -1,7 +1,7 @@
 """DeveloperAgent 单元测试。"""
 
 from app.agents.developer import DeveloperAgent
-from contracts.agent_result import AgentRole, PatchResult
+from contracts.agent_result import AgentRole, PatchSetResult
 from contracts.state import create_initial_state
 
 
@@ -18,7 +18,11 @@ class TestDeveloperAgent:
 
     def test_output_schema(self):
         agent = DeveloperAgent()
-        assert agent.output_schema == PatchResult
+        assert agent.output_schema == PatchSetResult
+
+    def test_tool_calling_enabled(self):
+        assert DeveloperAgent().ENABLE_TOOL_CALLING is True
+        assert DeveloperAgent().REQUIRE_READ_FOR_EXISTING_PATCHES is True
 
     def test_use_mock_default(self):
         agent = DeveloperAgent()
@@ -45,11 +49,14 @@ class TestDeveloperAgent:
         )
         result = agent.mock_result(state)
         data = result.result
+        assert data is not None
+        assert len(data["patches"]) == 1
+        patch = data["patches"][0]
         for key in [
             "file_path", "original_snippet", "patched_snippet",
             "diff", "change_description", "change_type",
         ]:
-            assert key in data, f"缺少字段: {key}"
+            assert key in patch, f"缺少字段: {key}"
 
     def test_mock_result_diff_is_unified_format(self):
         """diff 应为 unified diff 格式（以 @@ 开头）。"""
@@ -58,7 +65,7 @@ class TestDeveloperAgent:
             task_id="t-001", repo_url="x", branch="main", requirement="x",
         )
         result = agent.mock_result(state)
-        assert "@@" in result.result["diff"]
+        assert "@@" in result.result["patches"][0]["diff"]
 
     def test_mock_result_change_type_valid(self):
         """change_type 必须是合法的枚举值。"""
@@ -67,7 +74,7 @@ class TestDeveloperAgent:
             task_id="t-001", repo_url="x", branch="main", requirement="x",
         )
         result = agent.mock_result(state)
-        assert result.result["change_type"] in ("add", "modify", "delete", "rename")
+        assert result.result["patches"][0]["change_type"] in ("add", "modify", "delete", "rename")
 
     def test_mock_result_has_reasoning(self):
         agent = DeveloperAgent()
@@ -89,7 +96,7 @@ class TestDeveloperAgent:
         result = agent.invoke(state)
         assert result.success is True
         assert result.agent_role == AgentRole.DEVELOPER
-        assert "@@" in result.result.get("diff", "")
+        assert "@@" in result.result["patches"][0]["diff"]
 
     # ------------------------------------------------------------------
     # 上下文构建

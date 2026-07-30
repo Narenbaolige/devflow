@@ -14,20 +14,16 @@ PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
 class DeveloperAgent(AgentBase):
-
-    # DeepSeek's OpenAI-compatible endpoint accepts ordinary structured
-    # completions reliably in this deployment, while native tool-call payloads
-    # stall at the local proxy.  Generate the patch directly from the verified
-    # plan; sandbox application and tests still run against the real checkout.
-    ENABLE_TOOL_CALLING = False
+    # Inspect the repository and run focused verification before producing a
+    # patch. The graph applies the returned patch, so tools are for evidence
+    # gathering and verification, not directly editing the checkout.
+    ENABLE_TOOL_CALLING = True
+    REQUIRE_TOOL_CALLING = True
+    REQUIRE_READ_FOR_EXISTING_PATCHES = True
     # A unified diff can be substantially larger than a requirement analysis.
     # Do not turn a valid in-flight model response into a synthetic patch.
     TIMEOUT_SECONDS = None
     FALLBACK_TO_MOCK_ON_ERROR = False
-    # Patch generation needs the actual target-file contents.  The base-agent
-    # default (2K tokens) truncates that context and makes the model invent
-    # snippets which cannot be applied.
-    max_context_tokens = 8_000
 
     @property
     def role(self) -> AgentRole:
@@ -46,6 +42,10 @@ Never use placeholder output, Hello World, TODO-only code, or claim a feature
 is implemented without executable behavior. For existing files, copy
 `original_snippet` verbatim from the supplied repository source. For new files,
 use `change_type: add` and an empty `original_snippet`.
+
+Use file and search tools before writing the patch. Do not use write_file,
+edit_file, or mutating shell commands: DevFlow applies the returned patch in a
+separate, auditable step.
 """
         tools_guide = PROMPTS_DIR / "developer_tools.md"
         if self.ENABLE_TOOL_CALLING and tools_guide.exists():

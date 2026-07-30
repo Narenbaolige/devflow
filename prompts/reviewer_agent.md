@@ -76,5 +76,5 @@
 - passed: bool
 - risk_level: low / medium / high
 - issues: 问题列表（每项含 severity, file_path, description, suggestion）
-- summary: 审查总结（≤300字）
+- summary: 审查总结
 - actionable_feedback: 未通过时的可执行返工指令（具体到文件和行号）

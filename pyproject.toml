@@ -10,12 +10,16 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
-    "langgraph>=0.2.0",
-    "langgraph-checkpoint-postgres>=2.0.0",
+    # Keep LangGraph and LangChain on their compatible 1.x release lines.
+    # Unbounded lower limits allow pip to combine LangGraph 1.x with the
+    # incompatible LangChain Core 0.2 series at install time.
+    "langgraph>=1.2.10,<2.0.0",
+    "langgraph-checkpoint-postgres>=3.1.0,<4.0.0",
     "psycopg[binary]>=3.2.0",
-    "langchain>=0.3.0",
-    "langchain-openai>=0.2.0",
-    "langchain-community>=0.3.0",
+    "langchain>=1.0.0,<2.0.0",
+    "langchain-core>=1.5.1,<2.0.0",
+    "langchain-openai>=1.4.0,<2.0.0",
+    "langchain-community>=0.4.0,<1.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.0.0",

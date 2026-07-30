@@ -20,6 +20,10 @@ class TestPlannerAgent:
         agent = PlannerAgent()
         assert agent.output_schema == PlanResult
 
+    def test_tool_calling_enabled(self):
+        assert PlannerAgent().ENABLE_TOOL_CALLING is True
+        assert PlannerAgent().REQUIRE_TOOL_CALLING is True
+
     def test_use_mock_default(self):
         agent = PlannerAgent()
         assert agent.USE_MOCK is True

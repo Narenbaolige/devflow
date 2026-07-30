@@ -44,6 +44,9 @@ class Settings:
     # provider access.
     LLM_TRUST_ENV: bool = os.getenv("LLM_TRUST_ENV", "true").lower() == "true"
     LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "0"))
+    # 0 omits max_tokens from provider requests, leaving output length to the
+    # model service. Use a positive value only when an explicit cap is needed.
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "0"))
 
     # Sandbox
     SANDBOX_MODE: str = os.getenv("SANDBOX_MODE", "local")

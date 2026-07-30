@@ -89,7 +89,7 @@ cd devflow
 # 2. 安装
 python -m venv .venv
 .venv\Scripts\activate      # Windows
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 
 cd frontend && npm install && cd ..
 
@@ -99,6 +99,32 @@ cd frontend && npm install && cd ..
 python -m app.run            # 后端 → http://localhost:8000
 cd frontend && npm run dev   # 前端 → http://localhost:5173
 ```
+
+### LangGraph / LangChain Core 版本兼容性
+
+DevFlow 使用 LangGraph 1.x，必须与 **LangChain Core 1.x** 一起安装。
+如果虚拟环境中残留 `langchain-core 0.2.x`，后端启动时可能出现如下错误：
+
+```text
+ModuleNotFoundError: No module named 'langchain_core.language_models.chat_model_stream'
+```
+
+遇到该错误时，请关闭服务并在项目根目录重建虚拟环境：
+
+```powershell
+Remove-Item -Recurse -Force .venv
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+安装后可检查已解析的版本（不要使用 `langgraph.__version__`）：
+
+```powershell
+.\.venv\Scripts\python.exe -c "from importlib.metadata import version; print('langgraph=', version('langgraph')); print('langchain-core=', version('langchain-core'))"
+```
+
+`langchain-core` 必须显示为 `1.x`。通过检查后再运行 `start.ps1` 或 `start.bat`。
 
 ### Mock 模式（默认）
 

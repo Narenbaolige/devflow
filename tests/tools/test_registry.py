@@ -91,3 +91,13 @@ class TestToolRegistry:
         assert "read_file" in tool_names
         assert "grep" in tool_names
         assert "write_file" not in tool_names
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        ["read_file", "list_dir", "glob", "grep", "write_file", "edit_file", "sandbox_execute"],
+    )
+    def test_callable_tools_expose_object_parameter_schemas(self, tool_name):
+        """Function-calling 工具必须向模型提供有效的对象参数 schema。"""
+        parameters = TOOL_REGISTRY[tool_name].parameters
+        assert parameters["type"] == "object"
+        assert isinstance(parameters["properties"], dict)

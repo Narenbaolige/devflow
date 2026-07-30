@@ -65,7 +65,7 @@
 ## 输出格式
 
 严格按照 JSON Schema 输出，包含以下字段：
-- approach: 总体技术方案（≤500字）
+- approach: 总体技术方案
 - steps: 步骤列表，每步含 step_id、description、target_files、expected_changes、depends_on
 - risk_points: 风险点列表（至少 1 条）
 - alternative_approaches: 备选方案（至少 1 条）

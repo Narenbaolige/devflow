@@ -36,18 +36,35 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         name="read_file",
         description="读取指定文件的完整内容",
         permission=ToolPermission.READ_ONLY,
+        parameters={
+            "type": "object",
+            "properties": {"file_path": {"type": "string", "description": "仓库内相对路径"}},
+            "required": ["file_path"],
+            "additionalProperties": False,
+        },
         allowed_agents=["planner", "developer", "reviewer", "security"],
     ),
     "list_dir": ToolDefinition(
         name="list_dir",
         description="列出目录下的文件和子目录",
         permission=ToolPermission.READ_ONLY,
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "仓库内相对目录，默认 ."}},
+            "additionalProperties": False,
+        },
         allowed_agents=["requirement", "planner", "developer"],
     ),
     "glob": ToolDefinition(
         name="glob",
         description="按 glob 模式匹配文件路径（如 **/*.py）",
         permission=ToolPermission.READ_ONLY,
+        parameters={
+            "type": "object",
+            "properties": {"pattern": {"type": "string", "description": "glob 模式，例如 **/*.py"}},
+            "required": ["pattern"],
+            "additionalProperties": False,
+        },
         allowed_agents=["planner", "developer"],
     ),
 
@@ -56,6 +73,15 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         name="grep",
         description="在代码仓库中搜索正则模式，返回匹配的文件和行",
         permission=ToolPermission.READ_ONLY,
+        parameters={
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "要搜索的文本或正则表达式"},
+                "path": {"type": "string", "description": "仓库内相对目录，默认 repo"},
+            },
+            "required": ["pattern"],
+            "additionalProperties": False,
+        },
         allowed_agents=["planner", "developer", "reviewer", "security"],
     ),
 
@@ -64,12 +90,31 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         name="write_file",
         description="在沙箱工作区中写入或覆盖文件",
         permission=ToolPermission.WRITE_SANDBOX,
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "仓库内相对路径"},
+                "content": {"type": "string", "description": "完整文件内容"},
+            },
+            "required": ["file_path", "content"],
+            "additionalProperties": False,
+        },
         allowed_agents=["developer"],
     ),
     "edit_file": ToolDefinition(
         name="edit_file",
         description="精确替换文件中的指定字符串（old_string → new_string）",
         permission=ToolPermission.WRITE_SANDBOX,
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "仓库内相对路径"},
+                "old_string": {"type": "string", "description": "待替换的精确文本"},
+                "new_string": {"type": "string", "description": "替换后的文本"},
+            },
+            "required": ["file_path", "old_string", "new_string"],
+            "additionalProperties": False,
+        },
         allowed_agents=["developer"],
     ),
 
@@ -82,9 +127,14 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         ),
         permission=ToolPermission.EXECUTE_SANDBOX,
         parameters={
-            "command": {"type": "string", "description": "要执行的 shell 命令"},
-            "cwd": {"type": "string", "description": "工作目录，默认 /workspace"},
-            "timeout": {"type": "integer", "description": "超时秒数，默认 60"},
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "要执行的 shell 命令"},
+                "cwd": {"type": "string", "description": "工作目录，默认 repo"},
+                "timeout": {"type": "integer", "description": "超时秒数，默认 60", "minimum": 1, "maximum": 300},
+            },
+            "required": ["command"],
+            "additionalProperties": False,
         },
         allowed_agents=["developer"],
         rate_limit_per_minute=10,

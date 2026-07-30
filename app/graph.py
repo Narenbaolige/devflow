@@ -189,9 +189,9 @@ async def setup_workspace(state: TeamState) -> TeamState:
                 return state
 
         state["phase"] = "developing"
-        # Supply deterministic file contents to the model.  A file list alone
-        # cannot make original_snippet match, so include a bounded excerpt of
-        # each small text file from the real checkout.
+        # Supply the full tracked text repository to the model.  DevFlow does
+        # not impose a snapshot budget; the selected model's context window is
+        # the sole limit.
         import tempfile as _tempfile
         from pathlib import Path as _Path
 
@@ -205,22 +205,17 @@ import subprocess
 from pathlib import Path
 
 targets = __TARGET_FILES__
-budget = 30_000
 parts = []
 all_paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
 # Put Planner-selected files first so the Developer sees their exact contents.
 for relative_path in sorted(all_paths, key=lambda item: (item not in targets, item)):
     path = Path(relative_path)
     try:
-        if path.stat().st_size > 50_000:
-            continue
         content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         continue
-    parts.append(f"FILE: {relative_path}\\n{content[:6_000]}")
-    if sum(len(part) for part in parts) >= budget:
-        break
-print("\\n\\n---\\n\\n".join(parts)[:budget])
+    parts.append(f"FILE: {relative_path}\\n{content}")
+print("\\n\\n---\\n\\n".join(parts))
 '''
         snapshot_script.write_text(
             snapshot_source.replace("__TARGET_FILES__", repr(target_files)),
@@ -228,7 +223,7 @@ print("\\n\\n---\\n\\n".join(parts)[:budget])
         )
         snapshot = await _sandbox_call(sandbox, f"python {snapshot_script}", cwd="repo", timeout=20)
         snapshot_script.unlink(missing_ok=True)
-        state["repository_context"] = snapshot.stdout[:30_000] if snapshot.exit_code == 0 else ""
+        state["repository_context"] = snapshot.stdout if snapshot.exit_code == 0 else ""
         _record_event(state, "node_complete", "工作区准备完成，仓库已 clone", "setup_workspace")
     except asyncio.CancelledError:
         state["phase"] = "cancelled"
@@ -946,13 +941,11 @@ def build_graph(checkpointer=None):
     builder.set_entry_point("init_task")
     builder.add_edge("init_task", "analyze_requirement")
 
-    # Requirement analysis is followed by planning unconditionally.  The
-    # previous conditional hand-off could leave a background invocation parked
-    # between nodes, displaying a stale "planning" state without ever entering
-    # the Planner node.
-    builder.add_edge("analyze_requirement", "plan_solution")
-    builder.add_edge("plan_solution", "setup_workspace")
-    builder.add_edge("setup_workspace", "develop_changes")
+    # Clone and index the repository before planning so Planner tool calls can
+    # inspect the real checkout. Developer then uses the same task sandbox.
+    builder.add_edge("analyze_requirement", "setup_workspace")
+    builder.add_edge("setup_workspace", "plan_solution")
+    builder.add_edge("plan_solution", "develop_changes")
     builder.add_edge("develop_changes", "apply_patches")
     builder.add_conditional_edges(
         "apply_patches",

@@ -35,7 +35,7 @@ def create_llm(
     provider: str = "openai",
     model: str = "gpt-4o-mini",
     temperature: float = 0.1,
-    max_tokens: int = 4096,
+    max_tokens: int | None = None,
     timeout: int | None = None,
 ) -> ChatOpenAI:
     """
@@ -48,7 +48,7 @@ def create_llm(
         provider: Provider 名称 (openai / deepseek / chatanywhere)
         model: 模型名称
         temperature: 温度参数（Agent 场景建议 0.1，降低随机性）
-        max_tokens: 最大输出 token
+        max_tokens: 最大输出 token；None 或 0 时不向 Provider 传递上限
         timeout: 超时秒数
     """
     if provider == "deepseek":
@@ -70,10 +70,13 @@ def create_llm(
     # 过滤空值
     kwargs = {k: v for k, v in kwargs.items() if v}
 
+    effective_max_tokens = max_tokens if max_tokens is not None else settings.LLM_MAX_TOKENS
+    if effective_max_tokens and effective_max_tokens > 0:
+        kwargs["max_tokens"] = effective_max_tokens
+
     return ChatOpenAI(
         model=model,
         temperature=temperature,
-        max_tokens=max_tokens,
         timeout=timeout,
         # Do not let the OpenAI client retry a request behind the workflow's
         # back.  The workflow owns the timeout and reports failures visibly.

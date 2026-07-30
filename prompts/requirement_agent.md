@@ -65,7 +65,7 @@
 ## 输出格式
 
 严格按照 JSON Schema 输出，包含以下字段：
-- summary: 需求一句话概述（≤100字）
+- summary: 需求概述
 - affected_modules: 可能受影响的文件/模块列表
 - acceptance_criteria: 可验证的验收条件列表（2-5 条）
 - ambiguity_flags: 需要人类澄清的模糊点（至少 1 条，即使需求清晰也标注潜在不确定性）

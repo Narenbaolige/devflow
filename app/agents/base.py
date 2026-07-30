@@ -43,12 +43,15 @@ class AgentBase(ABC):
     # window than the lightweight analysis agents.
     TIMEOUT_SECONDS: int | None = None
 
-    # 上下文 Token 预算（粗糙估计：1 token ≈ 4 字符）
-    max_context_tokens: int = 2000
+    # 0 means no DevFlow-side context clipping. The model provider's context
+    # window remains the only hard limit.
+    max_context_tokens: int = 0
 
     # 是否启用工具调用（子类覆盖为 True 以开启）
     ENABLE_TOOL_CALLING: bool = False
     MAX_TOOL_ROUNDS: int = 5
+    REQUIRE_TOOL_CALLING: bool = False
+    REQUIRE_READ_FOR_EXISTING_PATCHES: bool = False
 
     # System Prompt 缓存
     _cached_prompt: str | None = None
@@ -134,11 +137,14 @@ class AgentBase(ABC):
 
     def _clip_context(self, context: str) -> str:
         """
-        确保上下文不超出 Token 预算。
+        在设置了正数预算时确保上下文不超出 Token 预算。
 
         超长时保留头部 70% + 尾部 30%，中间插入截断标记。
         未超长时原样返回。
         """
+        if self.max_context_tokens <= 0:
+            return context
+
         estimated = self._estimate_tokens(context)
         if estimated <= self.max_context_tokens:
             return context
@@ -298,6 +304,65 @@ class AgentBase(ABC):
     # 工具调用模式
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _tool_assistant_message(response, tool_calls: list[dict]) -> dict:
+        """Build the assistant turn that precedes tool-result messages.
+
+        Reasoning-capable OpenAI-compatible providers may return an opaque
+        ``reasoning_content`` value together with a tool call. Their APIs
+        require that value to be returned unchanged on the next request.
+        """
+        message = {
+            "role": "assistant",
+            "content": getattr(response, "content", "") or "",
+            "tool_calls": tool_calls,
+        }
+        additional_kwargs = getattr(response, "additional_kwargs", {}) or {}
+        reasoning_content = additional_kwargs.get("reasoning_content")
+        if reasoning_content is not None:
+            message["reasoning_content"] = reasoning_content
+        return message
+
+    @staticmethod
+    def _invoke_json_response(llm, messages):
+        """Request a syntactically valid JSON object from the final turn.
+
+        Tool-use turns must remain unconstrained so the model can emit tool
+        calls. Once tool use is complete, JSON mode prevents multiline patch
+        snippets from being emitted as invalid, unescaped JSON strings.
+        """
+        return llm.bind(response_format={"type": "json_object"}).invoke(messages)
+
+    @staticmethod
+    def _tool_call_args(tool_call: dict) -> dict:
+        """Read arguments from both LangChain and raw OpenAI tool-call forms."""
+        args = tool_call.get("args", tool_call.get("arguments", {}))
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                return {}
+        return args if isinstance(args, dict) else {}
+
+    def _tool_evidence_error(
+        self, result: BaseModel, tool_call_count: int, read_files: set[str]
+    ) -> str | None:
+        """Reject ungrounded patches before they reach the patch applier."""
+        if self.REQUIRE_TOOL_CALLING and tool_call_count == 0:
+            return "在交付最终结果前必须先调用工具检索仓库。"
+        if not self.REQUIRE_READ_FOR_EXISTING_PATCHES:
+            return None
+        missing = []
+        for patch in result.model_dump().get("patches", []):
+            if patch.get("change_type") == "add":
+                continue
+            file_path = str(patch.get("file_path", "")).removeprefix("repo/")
+            if file_path and file_path not in read_files:
+                missing.append(file_path)
+        if missing:
+            return "修改已有文件前必须先用 read_file 读取其真实内容：" + ", ".join(missing)
+        return None
+
     def _invoke_with_tools(self, state: TeamState, llm) -> AgentResult:
         """带工具调用的 Agent 执行：LLM 可在沙箱中读文件/搜索/执行命令。"""
         from app.tools.registry import get_tools_for_agent
@@ -346,6 +411,8 @@ class AgentBase(ABC):
         total_output = 0
         validation_retries = 0
         model_name = getattr(llm, "model", "unknown")
+        tool_call_count = 0
+        read_files: set[str] = set()
 
         for round_num in range(self.MAX_TOOL_ROUNDS):
             try:
@@ -375,6 +442,14 @@ class AgentBase(ABC):
                 try:
                     from app.agents.validator import validate_against_model
                     result = validate_against_model(raw_text, self.output_schema)
+                    evidence_error = self._tool_evidence_error(result, tool_call_count, read_files)
+                    if evidence_error:
+                        validation_retries += 1
+                        messages.append({
+                            "role": "user",
+                            "content": evidence_error + " 请先完成检索，再重新输出最终 JSON。",
+                        })
+                        continue
                     duration_ms = int((time.time() - start_time) * 1000)
                     return AgentResult(
                         agent_role=self.role, success=True, result=result.model_dump(),
@@ -386,25 +461,35 @@ class AgentBase(ABC):
                         ),
                         reasoning=f"{self.role.value} Agent 调用完成（{round_num}轮工具调用）",
                     )
-                except Exception:
+                except Exception as exc:
                     # Output wasn't valid JSON → ask LLM to fix
                     validation_retries += 1
+                    fix_hint = getattr(exc, "fix_hint", str(exc))
                     messages.append({
                         "role": "user",
-                        "content": "输出不是有效的 JSON，请严格按照 JSON Schema 格式输出。",
+                        "content": (
+                            "上一份输出无法通过 JSON Schema 校验。只输出完整 JSON，"
+                            "不要截断、不要 Markdown、不要附加解释。\n"
+                            f"校验错误：{fix_hint}"
+                        ),
                     })
                     continue
+
+            # Preserve the complete assistant turn before adding one result
+            # message per call.  Splitting it into several assistant messages
+            # loses provider-specific reasoning state and breaks multi-tool
+            # responses.
+            messages.append(self._tool_assistant_message(response, tool_calls))
 
             # Execute tool calls
             for tc in tool_calls:
                 func_name = tc.get("name", "")
-                func_args = tc.get("arguments", {})
-                if isinstance(func_args, str):
-                    try:
-                        import json as _j
-                        func_args = _j.loads(func_args)
-                    except Exception:
-                        func_args = {}
+                func_args = self._tool_call_args(tc)
+                tool_call_count += 1
+                if func_name == "read_file":
+                    file_path = str(func_args.get("file_path", "")).removeprefix("repo/")
+                    if file_path:
+                        read_files.add(file_path)
 
                 impl = TOOL_IMPL_MAP.get(func_name)
                 if impl:
@@ -416,14 +501,9 @@ class AgentBase(ABC):
                     tool_result = f"[未知工具] {func_name}"
 
                 messages.append({
-                    "role": "assistant",
-                    "content": getattr(response, "content", "") or "",
-                    "tool_calls": [tc],
-                })
-                messages.append({
                     "role": "tool",
                     "tool_call_id": tc.get("id", f"call_{round_num}"),
-                    "content": str(tool_result)[:4000],
+                    "content": str(tool_result),
                 })
 
         # Max tool rounds reached — force final output
@@ -431,22 +511,47 @@ class AgentBase(ABC):
             "role": "user",
             "content": "已达最大工具调用轮次。基于已获取的信息，输出最终 JSON 结果。",
         })
+        last_error = None
         try:
-            response = llm.invoke(messages)
-            raw_text = response.content if hasattr(response, "content") else str(response)
-            from app.agents.validator import validate_against_model
-            result = validate_against_model(raw_text, self.output_schema)
-            duration_ms = int((time.time() - start_time) * 1000)
-            return AgentResult(
-                agent_role=self.role, success=True, result=result.model_dump(),
-                invocation=AgentInvocation(
-                    agent_role=self.role, model=model_name,
-                    input_tokens=total_input, output_tokens=total_output,
-                    cost_usd=estimate_cost(model_name, total_input, total_output),
-                    duration_ms=duration_ms, retry_count=validation_retries,
-                ),
-                reasoning=f"{self.role.value} Agent 调用完成（达最大工具轮次）",
-            )
+            for attempt in range(3):
+                response = self._invoke_json_response(llm, messages)
+                raw_text = response.content if hasattr(response, "content") else str(response)
+                try:
+                    from app.agents.validator import validate_against_model
+                    result = validate_against_model(raw_text, self.output_schema)
+                    evidence_error = self._tool_evidence_error(result, tool_call_count, read_files)
+                    if evidence_error:
+                        validation_retries += 1
+                        messages.append({
+                            "role": "user",
+                            "content": evidence_error + " 请先完成检索，再重新输出最终 JSON。",
+                        })
+                        continue
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    return AgentResult(
+                        agent_role=self.role, success=True, result=result.model_dump(),
+                        invocation=AgentInvocation(
+                            agent_role=self.role, model=model_name,
+                            input_tokens=total_input, output_tokens=total_output,
+                            cost_usd=estimate_cost(model_name, total_input, total_output),
+                            duration_ms=duration_ms, retry_count=validation_retries,
+                        ),
+                        reasoning=f"{self.role.value} Agent 调用完成（达最大工具轮次）",
+                    )
+                except Exception as exc:
+                    last_error = exc
+                    validation_retries += 1
+                    if attempt < 2:
+                        fix_hint = getattr(exc, "fix_hint", str(exc))
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                "上一份最终输出不是完整有效的 JSON。仅重新输出完整 JSON 对象，"
+                                "不得截断、不得输出 Markdown 或解释。\n"
+                                f"校验错误：{fix_hint}"
+                            ),
+                        })
+            raise RuntimeError(f"最终 JSON 在 3 次尝试后仍无效：{last_error}")
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
             if self.FALLBACK_TO_MOCK_ON_ERROR:

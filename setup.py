@@ -1,9 +1,9 @@
-"""Minimal setup.py for editable install."""
+"""Compatibility entry point for editable installs.
+
+Project metadata and dependencies live exclusively in ``pyproject.toml``.
+Duplicating them here caused legacy editable installs to omit runtime
+dependencies and leave incompatible LangChain packages in the environment.
+"""
 from setuptools import find_packages, setup
 
-setup(
-    name="devflow",
-    version="0.1.0",
-    packages=find_packages(),
-    python_requires=">=3.11",
-)
+setup(packages=find_packages())

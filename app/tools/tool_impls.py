@@ -12,6 +12,9 @@ def tool_read_file(file_path: str, task_id: str = "default") -> str:
     """读取沙箱中指定文件的内容。"""
     if not file_path:
         return "[错误] file_path 不能为空"
+    # Both `repo/foo.py` (from prompts) and `foo.py` are accepted.
+    if file_path.startswith("repo/"):
+        file_path = file_path.removeprefix("repo/")
     # 路径遍历保护：拒绝包含 .. 或绝对路径的路径
     if ".." in file_path or file_path.startswith("/") or file_path.startswith("\\"):
         return f"[安全拒绝] 不允许的路径: {file_path}"

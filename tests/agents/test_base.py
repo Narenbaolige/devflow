@@ -1,5 +1,7 @@
 """Agent 基类与契约验证测试。"""
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.agents.base import AgentBase
@@ -144,6 +146,13 @@ class TestAgentBaseContext:
     # ------------------------------------------------------------------
     # Token 估算
     # ------------------------------------------------------------------
+
+    def test_default_context_is_not_clipped(self):
+        """默认不施加 DevFlow 侧上下文长度限制。"""
+        agent = RequirementAgent()
+        context = "x" * 50_000
+        assert agent.max_context_tokens == 0
+        assert agent._clip_context(context) == context
 
     def test_estimate_tokens_english(self):
         """英文字符的 token 估算：1 token ≈ 4 chars。"""
@@ -303,6 +312,54 @@ class TestAgentBaseFallback:
         assert result.success is False
         assert "FALLBACK" not in result.reasoning
         assert result.error is not None
+
+
+class TestToolCallingMessages:
+    """验证工具调用轮次的消息保留。"""
+
+    def test_reasoning_content_is_preserved_for_the_next_tool_round(self):
+        response = SimpleNamespace(
+            content="先读取配置文件。",
+            additional_kwargs={"reasoning_content": "opaque-provider-state"},
+        )
+        tool_calls = [{"id": "call_1", "name": "read_file", "args": {"file_path": "tests/test_config.py"}}]
+
+        message = AgentBase._tool_assistant_message(response, tool_calls)
+
+        assert message["reasoning_content"] == "opaque-provider-state"
+        assert message["tool_calls"] == tool_calls
+
+    def test_missing_reasoning_content_is_not_invented(self):
+        response = SimpleNamespace(content="", additional_kwargs={})
+
+        message = AgentBase._tool_assistant_message(response, [])
+
+        assert "reasoning_content" not in message
+
+    def test_final_response_uses_provider_json_mode(self):
+        class BoundLLM:
+            def invoke(self, messages):
+                assert messages == [{"role": "user", "content": "deliver"}]
+                return "response"
+
+        class FakeLLM:
+            def bind(self, **kwargs):
+                assert kwargs == {"response_format": {"type": "json_object"}}
+                return BoundLLM()
+
+        assert AgentBase._invoke_json_response(
+            FakeLLM(), [{"role": "user", "content": "deliver"}]
+        ) == "response"
+
+    def test_tool_call_args_supports_langchain_args_field(self):
+        tool_call = {"name": "read_file", "args": {"file_path": "README.md"}}
+
+        assert AgentBase._tool_call_args(tool_call) == {"file_path": "README.md"}
+
+    def test_tool_call_args_supports_raw_openai_json_arguments(self):
+        tool_call = {"name": "read_file", "arguments": '{"file_path":"README.md"}'}
+
+        assert AgentBase._tool_call_args(tool_call) == {"file_path": "README.md"}
 
 
 class TestSanitizeInput:
