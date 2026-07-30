@@ -233,6 +233,14 @@ class AgentBase(ABC):
             diff = p.get("diff", "")
             if not diff.strip():
                 warnings.append(f"Patch {i}: diff 为空")
+            # Check: new files must be in a project folder
+            if p.get("change_type") == "add":
+                fp = p.get("file_path", "")
+                if "/" not in fp and "\\" not in fp:
+                    warnings.append(
+                        f"Patch {i}: 新建文件 {fp} 未放入项目文件夹——"
+                        f"请改为 项目名/{fp} 格式（如 sorting/{fp}）"
+                    )
         return warnings
 
     def _invoke_prompt_only(self, state: TeamState, llm) -> AgentResult:
