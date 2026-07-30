@@ -51,10 +51,10 @@ export default function EvalCompare() {
       </div>
 
       <div className={styles.statsRow}>
-        <StatsCard label="总任务数" value={stats?.total_tasks ?? 40} color="var(--text-primary)" />
-        <StatsCard label="完成数" value={stats ? `${stats.completed_tasks}` : "90%"} color="var(--accent)" />
-        <StatsCard label="平均耗时" value={stats ? (stats.average_duration_ms / 1000).toFixed(1) : "15.2"} unit="s" color="var(--blue)" />
-        <StatsCard label="总成本" value={stats ? stats.total_cost_usd.toFixed(4) : "0.0261"} unit="USD" color="var(--text-primary)" />
+        <StatsCard label="总任务数" value={stats?.total_tasks ?? 40} />
+        <StatsCard label="完成数" value={stats ? `${stats.completed_tasks}` : "90%"} />
+        <StatsCard label="平均耗时" value={stats ? (stats.average_duration_ms / 1000).toFixed(1) : "15.2"} unit="s" />
+        <StatsCard label="总成本" value={stats ? stats.total_cost_usd.toFixed(4) : "0.0261"} unit="USD" />
       </div>
 
       <div className={styles.section}>

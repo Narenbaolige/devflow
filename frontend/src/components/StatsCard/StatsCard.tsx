@@ -4,14 +4,13 @@ interface Props {
   label: string;
   value: string | number;
   unit?: string;
-  color?: string;
 }
 
-export default function StatsCard({ label, value, unit = "", color = "#e6edf3" }: Props) {
+export default function StatsCard({ label, value, unit = "" }: Props) {
   return (
     <div className={styles.card}>
       <div className={styles.label}>{label}</div>
-      <div className={styles.value} style={{ color }}>
+      <div className={styles.value}>
         {value}
         {unit && <span className={styles.unit}>{unit}</span>}
       </div>
