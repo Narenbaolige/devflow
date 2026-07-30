@@ -44,6 +44,7 @@ def extract_json(text: str) -> str:
     从 LLM 原始文本中提取 JSON 字符串。
 
     处理常见情况：
+      - <output>...</output> 标签（CoT 模式）
       - ```json ... ``` 代码块
       - ``` ... ``` 代码块（无语言标记）
       - 直接 JSON
@@ -60,14 +61,31 @@ def extract_json(text: str) -> str:
 
     text = text.strip()
 
-    # 1. 尝试 ```json ... ``` 代码块
+    # 1. 尝试 <output>...</output> 标签（CoT 推理模式）
+    m = re.search(r"<output>\s*([\s\S]*?)\s*</output>", text)
+    if m:
+        inner = m.group(1).strip()
+        # The output may contain ```json blocks inside <output>
+        code_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", inner)
+        if code_block:
+            return code_block.group(1).strip()
+        if inner.startswith("{") or inner.startswith("["):
+            return inner
+
+    # 1b. 如果有 <thinking> 但没有 <output>，剥离 thinking 后再提取 JSON
+    if "<thinking>" in text and "<output>" not in text:
+        stripped = re.sub(r"<thinking>[\s\S]*?</thinking>", "", text, flags=re.DOTALL).strip()
+        if stripped:
+            text = stripped
+
+    # 2. 尝试 ```json ... ``` 代码块
     m = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if m:
         inner = m.group(1).strip()
         if inner.startswith("{") or inner.startswith("["):
             return inner
 
-    # 2. 尝试直接找到最外层 {} 或 []
+    # 3. 尝试直接找到最外层 {} 或 []
     # 从第一个 { 或 [ 开始，找到匹配的闭合
     for opener, closer in [("{", "}"), ("[", "]")]:
         start = text.find(opener)
@@ -98,7 +116,7 @@ def extract_json(text: str) -> str:
 
     raise ValidationError(
         f"无法从 LLM 输出中提取 JSON 对象。输出开头: {text[:120]}...",
-        "请将输出包裹在 ```json ... ``` 代码块中，或直接输出 JSON 对象",
+        "请将输出包裹在 <output>...</output> 标签或 ```json ... ``` 代码块中",
     )
 
 
@@ -160,13 +178,70 @@ def validate_against_model(
 
 
 def _try_repair_json(text: str) -> str | None:
-    """尝试修复常见的 JSON 语法错误。返回修复后的字符串或 None。"""
+    """尝试修复 LLM 生成 JSON 时的常见错误。返回修复后的字符串或 None。"""
     # 1. 移除尾部多余逗号: {"a": 1,} → {"a": 1}
     repaired = re.sub(r",\s*([}\]])", r"\1", text)
-    # 2. 单引号 → 双引号（简单情况）
-    if repaired != text:
+
+    # 2. Try to close unterminated strings (LLM code in string values
+    #    often contains unescaped double-quotes and newlines)
+    try:
+        json.loads(repaired)
         return repaired
+    except json.JSONDecodeError as e:
+        if "Unterminated string" in e.msg or "Expecting" in e.msg:
+            # The JSON was truncated mid-string or mid-structure.
+            # Try to close open structures gracefully.
+            repaired2 = _close_open_structures(repaired)
+            try:
+                # Validate by loading — if it parses, Pydantic can
+                # fill missing required fields with defaults later
+                json.loads(repaired2)
+                return repaired2
+            except json.JSONDecodeError:
+                pass
+        if "Expecting value" in e.msg:
+            # Empty response or truncated before value
+            repaired2 = _close_open_structures(repaired)
+            try:
+                json.loads(repaired2)
+                return repaired2
+            except json.JSONDecodeError:
+                pass
+        return None
+
     return None
+
+
+def _close_open_structures(text: str) -> str:
+    """Close any open strings, objects, or arrays in truncated JSON."""
+    result = text.rstrip()
+
+    # Count open vs closed structures
+    open_braces = result.count("{") - result.count("}")
+    open_brackets = result.count("[") - result.count("]")
+
+    # Check if we're inside an unterminated string
+    in_string = False
+    escape = False
+    for ch in result:
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+
+    # Close unterminated string
+    if in_string:
+        result += '"'
+
+    # Close open arrays then objects
+    result += "]" * open_brackets
+    result += "}" * open_braces
+
+    return result
 
 
 def _build_json_fix_hint(json_str: str, error: json.JSONDecodeError) -> str:

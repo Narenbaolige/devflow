@@ -5,6 +5,7 @@ Reviewer Agent — 代码审查 + 测试结果分析 + 安全风险标注。
 标注安全风险（两周版：Security Agent 集成于此）。
 """
 
+import os
 from pathlib import Path
 
 from app.agents.base import AgentBase
@@ -20,6 +21,10 @@ class ReviewerAgent(AgentBase):
     # rather than accepting a Mock review in production mode.
     FALLBACK_TO_MOCK_ON_ERROR = False
     TIMEOUT_SECONDS = None
+    # Let the Reviewer read patched files and surrounding code to verify
+    # correctness, completeness, and style consistency — not just the diff
+    # snippets the Developer chose to expose.
+    ENABLE_TOOL_CALLING = os.getenv("DEVFLOW_ENABLE_TOOLS", "true").lower() == "true"
 
     @property
     def role(self) -> AgentRole:

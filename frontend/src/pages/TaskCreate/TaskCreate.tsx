@@ -6,9 +6,9 @@ import type { TaskResponse } from "../../types/task";
 import styles from "./TaskCreate.module.css";
 
 const DEFAULT_VALUES = {
-  repo_url: "https://github.com/Narenbaolige/devflow-test-repo",
+  repo_url: "https://github.com/Narenbaolige/devflow-test-repo",  // bubble sort + 8 tests
   branch: "main",
-  max_iterations: 3,
+  max_iterations: 5,
   timeout_seconds: 900,
 };
 
@@ -20,7 +20,7 @@ export default function TaskCreate() {
   const [maxIterations, setMaxIterations] = useState(DEFAULT_VALUES.max_iterations);
   const [timeoutSeconds, setTimeoutSeconds] = useState(DEFAULT_VALUES.timeout_seconds);
   const [budgetLimit, setBudgetLimit] = useState("");
-  const [publishToRemote, setPublishToRemote] = useState(true);
+  const [publishToRemote, setPublishToRemote] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentTasks, setRecentTasks] = useState<TaskResponse[]>([]);

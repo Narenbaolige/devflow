@@ -103,7 +103,7 @@ class CreateTaskRequest(BaseModel):
     requirement: str = Field(description="用户需求描述")
     repo_url: str = Field(description="代码仓库 URL")
     branch: str = Field(default="main", description="目标分支")
-    max_iterations: int = Field(default=3, ge=1, le=10, description="最大迭代次数")
+    max_iterations: int = Field(default=5, ge=1, le=10, description="最大迭代次数")
     timeout_seconds: int | None = Field(
         default=settings.TASK_TIMEOUT_SECONDS, ge=0, description="任务总超时秒数；0 表示不限时"
     )
@@ -242,8 +242,11 @@ async def _execute_task_pipeline(task_id: str, state: dict) -> dict:
 
     This avoids a LangGraph scheduler hang observed after requirement analysis
     while retaining the same real agents, sandbox, tests and review nodes.
+
+    Each node's output is persisted both in the in-memory store and in the
+    LangGraph checkpointer so that task listings survive memory-cache clears.
     """
-    for node in (workflow.init_task, workflow.analyze_requirement, workflow.plan_solution, workflow.setup_workspace):
+    for node in (workflow.init_task, workflow.setup_workspace, workflow.analyze_requirement, workflow.plan_solution):
         state = await node(state)
         _tasks_store[task_id] = state
         if state.get("phase") in {"failed", "cancelled", "awaiting_approval"}:

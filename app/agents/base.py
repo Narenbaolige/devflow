@@ -204,6 +204,37 @@ class AgentBase(ABC):
     # 纯 Prompt 模式（当前默认行为）
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _check_patch_quality(result_dict: dict) -> list[str]:
+        """检查 patch 输出的常见 LLM 错误。返回 warning 列表（空=无问题）。"""
+        import ast as _ast
+        import re as _re
+        warnings: list[str] = []
+        patches = result_dict.get("patches", [])
+        if not patches:
+            return ["patches 数组为空——必须至少包含一个 patch"]
+        for i, p in enumerate(patches):
+            snippet = p.get("patched_snippet", "")
+            if not snippet.strip():
+                warnings.append(f"Patch {i}: patched_snippet 为空")
+                continue
+            # Check for Python syntax errors
+            try:
+                _ast.parse(snippet)
+            except SyntaxError as e:
+                warnings.append(f"Patch {i}: {e.msg} (line {e.lineno})")
+            # Check for duplicate class/function definitions
+            classes = _re.findall(r'^\s*class\s+(\w+)', snippet, _re.MULTILINE)
+            funcs = _re.findall(r'^\s*def\s+(\w+)', snippet, _re.MULTILINE)
+            dupes = [c for c in classes if classes.count(c) > 1] + [f for f in funcs if funcs.count(f) > 1]
+            if dupes:
+                warnings.append(f"Patch {i}: 重复定义 — {list(set(dupes))}")
+            # Check for empty diff
+            diff = p.get("diff", "")
+            if not diff.strip():
+                warnings.append(f"Patch {i}: diff 为空")
+        return warnings
+
     def _invoke_prompt_only(self, state: TeamState, llm) -> AgentResult:
         """纯 Prompt 调用：System Prompt + Context → 结构化输出。"""
         start_time = time.time()
@@ -230,7 +261,12 @@ class AgentBase(ABC):
             raw_text: str | None = None
             for attempt in range(3):
                 try:
-                    response = llm.invoke(messages)
+                    # Use JSON mode to force valid JSON output.  DeepSeek-chat
+                    # otherwise often ignores the schema and emits free-form text.
+                    try:
+                        response = self._invoke_json_response(llm, messages)
+                    except Exception:
+                        response = llm.invoke(messages)
                     raw_text = response.content if hasattr(response, "content") else str(response)
                     from app.agents.validator import validate_against_model
                     result = validate_against_model(raw_text, self.output_schema)
@@ -240,9 +276,28 @@ class AgentBase(ABC):
                     last_error = str(e)
                     if attempt < 2:
                         hint = getattr(e, "fix_hint", str(e))
+                        # Check for patch quality issues and include in hint
+                        if raw_text and "patches" not in last_error.lower():
+                            try:
+                                from app.agents.validator import validate_against_model as _v
+                                partial = _v(raw_text, self.output_schema)
+                                q_warnings = self._check_patch_quality(partial.model_dump())
+                                if q_warnings:
+                                    hint += "\n代码质量问题:\n" + "\n".join(f"  - {w}" for w in q_warnings[:5])
+                            except Exception:
+                                pass
+                        extra = ""
+                        if "Unterminated string" in last_error:
+                            extra = (
+                                "\n注意: JSON 字符串值中的双引号必须转义(用 \\\" 代替 \")，"
+                                "换行必须写成 \\n。例如代码片段应该写成: "
+                                "\"def foo():\\n    return 1\""
+                            )
                         messages.append({
                             "role": "user",
-                            "content": f"上一次输出格式有误，请修正后重新输出。\n错误: {hint}",
+                            "content": (
+                                f"上一次输出格式有误，请修正后重新输出。\n错误: {hint}{extra}"
+                            ),
                         })
             else:
                 raise RuntimeError(

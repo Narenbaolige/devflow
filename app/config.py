@@ -58,7 +58,7 @@ class Settings:
     SANDBOX_MAX_CPUS: int = int(os.getenv("SANDBOX_MAX_CPUS", "1"))
 
     # Agent
-    MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
+    MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "5"))
     AGENT_TIMEOUT_SECONDS: int | None = _timeout_setting("AGENT_TIMEOUT_SECONDS", 120)
     TASK_TIMEOUT_SECONDS: int | None = _timeout_setting("TASK_TIMEOUT_SECONDS", 900)
     TASK_BUDGET_USD: float = float(os.getenv("TASK_BUDGET_USD", "0"))

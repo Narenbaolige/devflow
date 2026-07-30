@@ -125,7 +125,7 @@ def create_initial_state(
     repo_url: str,
     branch: str,
     requirement: str,
-    max_iterations: int = 3,
+    max_iterations: int = 5,
     execution_timeout_seconds: int | None = None,
     budget_limit_usd: float | None = None,
     publish_to_remote: bool = False,

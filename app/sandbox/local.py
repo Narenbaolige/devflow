@@ -123,6 +123,11 @@ class LocalSandbox(BaseSandbox):
 
         return cmd_result
 
+    @property
+    def workspace_path(self) -> str | None:
+        """返回工作区路径供产物导出。"""
+        return str(self._workspace) if self._workspace else None
+
     def cleanup(self) -> None:
         """删除临时工作区。"""
         if self._workspace is None:

@@ -188,3 +188,12 @@ class BaseSandbox(ABC):
             CommandResult — Agent 自行解读
         """
         ...
+
+    @property
+    def workspace_path(self) -> str | None:
+        """沙箱工作区路径，供产物导出使用。None 表示不可导出。"""
+        return None
+
+    def cleanup(self) -> None:
+        """清理沙箱资源。子类可覆写。"""
+        pass

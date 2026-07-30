@@ -138,7 +138,7 @@ class TestDeveloperAgent:
             "reasoning": "发现问题",
         }
         ctx = agent.build_context(state)
-        assert "返工" in ctx
+        assert "Reviewer 反馈" in ctx
         assert "try-except" in ctx
 
     def test_build_context_nonempty(self):

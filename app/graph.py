@@ -20,9 +20,7 @@ from contracts.state import TeamState
 # 沙箱 Mock 开关：通过环境变量 DEVFLOW_USE_MOCK 控制，默认 true
 # 注意：沙箱和 Agent 可以独立控制。设置 DEVFLOW_USE_SANDBOX=false 单独启用真实沙箱
 # =============================================================================
-_USE_MOCK_SANDBOX = os.getenv("DEVFLOW_USE_SANDBOX", os.getenv("DEVFLOW_USE_MOCK", "true")).lower() == "true"
-
-
+_USE_MOCK_SANDBOX = os.getenv("DEVFLOW_USE_SANDBOX", os.getenv("DEVFLOW_USE_MOCK", "false")).lower() == "true"
 def _record_event(state: TeamState, event_type: str, message: str, node_name: str) -> None:
     """在状态中记录可被 API/SSE 消费的轻量事件。"""
     state.setdefault("events", []).append({
@@ -86,6 +84,81 @@ async def _sandbox_call(sandbox, command: str, *, cwd: str = "/workspace", timeo
 # =============================================================================
 
 
+async def _generate_repository_snapshot(state: TeamState, sandbox) -> str:
+    """在沙箱仓库中生成代码快照，供 Agent 在上下文中使用。"""
+    import tempfile as _tempfile
+    from pathlib import Path as _Path
+
+    task_id = state["task_meta"]["task_id"]
+    target_files = []
+    for step in (state.get("plan") or {}).get("result", {}).get("steps", []):
+        target_files.extend(step.get("target_files", []))
+
+    # 如果是返工迭代，把之前 patch 涉及的文件也加入 target_files
+    for p in (state.get("patches") or []):
+        fp = p.get("file_path") if isinstance(p, dict) else getattr(p, "file_path", None)
+        if fp and fp not in target_files:
+            target_files.append(fp)
+
+    snapshot_script = _Path(_tempfile.gettempdir()) / f"devflow-snapshot-{task_id}.py"
+    snapshot_source = '''\
+import subprocess
+from pathlib import Path
+
+targets = set(__TARGET_FILES__)
+budget = 80_000
+parts = []
+
+all_paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+tree = "\\n".join(f"  {p}" for p in all_paths)
+parts.append(f"=== 文件树 ({len(all_paths)} 个文件) ===\\n{tree}\\n=== 文件内容 ===")
+
+remaining = budget - len(parts[0])
+
+for relative_path in sorted(all_paths, key=lambda item: (item not in targets, item)):
+    if remaining <= 0:
+        break
+    path = Path(relative_path)
+    try:
+        if path.stat().st_size > 80_000:
+            parts.append(f"\\nFILE: {relative_path}  [跳过: 文件过大]")
+            remaining -= 200
+            continue
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        continue
+
+    is_target = relative_path in targets
+    excerpt = content if is_target else "\\n".join(
+        [l for l in content.split("\\n")[:80] if l.startswith(("import ", "from "))][:10]
+        + [""]
+        + content.split("\\n")[:50]
+    )
+    if is_target or len(content) > len(excerpt):
+        excerpt = excerpt[:12_000]
+
+    part = f"\\nFILE: {relative_path} {'[TARGET]' if is_target else ''}\\n{excerpt}"
+    parts.append(part)
+    remaining -= len(part)
+
+result = "\\n---\\n".join(parts)
+if len(result) > budget:
+    result = result[:budget] + "\\n... [已达快照预算上限]"
+print(result)
+'''
+    snapshot_script.write_text(
+        snapshot_source.replace("__TARGET_FILES__", repr(target_files)),
+        encoding="utf-8",
+    )
+    snapshot = await _sandbox_call(sandbox, f"python {snapshot_script}", cwd="repo", timeout=30)
+    snapshot_script.unlink(missing_ok=True)
+    return snapshot.stdout[:80_000] if snapshot.exit_code == 0 else ""
+
+# =============================================================================
+# 节点实现（Day 1-2: 先用 Mock，Day 3-5: 替换为真实调用）
+# =============================================================================
+
+
 async def init_task(state: TeamState) -> TeamState:
     """初始化任务节点。记录任务开始。"""
     state["phase"] = "analyzing"
@@ -140,7 +213,7 @@ async def setup_workspace(state: TeamState) -> TeamState:
     _record_event(state, "node_start", "开始准备工作区", "setup_workspace")
 
     if _USE_MOCK_SANDBOX:
-        state["phase"] = "developing"
+        state["phase"] = "analyzing"
         _record_event(state, "node_complete", "工作区准备完成 (Mock)", "setup_workspace")
         return state
 
@@ -184,42 +257,11 @@ async def setup_workspace(state: TeamState) -> TeamState:
                 state["phase"] = "failed"
                 return state
 
-        state["phase"] = "developing"
-        # Supply the full tracked text repository to the model.  DevFlow does
-        # not impose a snapshot budget; the selected model's context window is
-        # the sole limit.
-        import tempfile as _tempfile
-        from pathlib import Path as _Path
-
-        target_files = []
-        for step in (state.get("plan") or {}).get("result", {}).get("steps", []):
-            target_files.extend(step.get("target_files", []))
-
-        snapshot_script = _Path(_tempfile.gettempdir()) / f"devflow-snapshot-{task_id}.py"
-        snapshot_source = '''\
-import subprocess
-from pathlib import Path
-
-targets = __TARGET_FILES__
-parts = []
-all_paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
-# Put Planner-selected files first so the Developer sees their exact contents.
-for relative_path in sorted(all_paths, key=lambda item: (item not in targets, item)):
-    path = Path(relative_path)
-    try:
-        content = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        continue
-    parts.append(f"FILE: {relative_path}\\n{content}")
-print("\\n\\n---\\n\\n".join(parts))
-'''
-        snapshot_script.write_text(
-            snapshot_source.replace("__TARGET_FILES__", repr(target_files)),
-            encoding="utf-8",
-        )
-        snapshot = await _sandbox_call(sandbox, f"python {snapshot_script}", cwd="repo", timeout=20)
-        snapshot_script.unlink(missing_ok=True)
-        state["repository_context"] = snapshot.stdout if snapshot.exit_code == 0 else ""
+        state["phase"] = "analyzing"
+        # Supply deterministic file contents to the model.  A file list alone
+        # cannot make original_snippet match, so include a bounded excerpt of
+        # each small text file from the real checkout.
+        state["repository_context"] = await _generate_repository_snapshot(state, sandbox)
         _record_event(state, "node_complete", "工作区准备完成，仓库已 clone", "setup_workspace")
     except asyncio.CancelledError:
         state["phase"] = "cancelled"
@@ -236,12 +278,60 @@ async def develop_changes(state: TeamState) -> TeamState:
 
     Developer Agent 可通过工具调用（tool_read_file / tool_list_dir / tool_grep）
     探索沙箱中的真实仓库代码，生成精确的 patch。
+
+    返工迭代时，将上一轮的测试失败详情注入 state，
+    使 Developer 能根据具体错误信息修复问题。
     """
     if _blocked(state, "develop_changes"):
         return state
     from app.agents import DeveloperAgent, agent_node
 
     state["phase"] = "developing"
+
+    # ── 返工迭代：刷新代码快照 + 提取测试失败详情 ──
+    if state.get("iteration", 0) > 0:
+        # 重新生成仓库快照，确保 Developer 看到被修改后的当前文件内容
+        if not _USE_MOCK_SANDBOX:
+            try:
+                from app.tools.sandbox_ops import get_sandbox
+                sandbox = get_sandbox(state["task_meta"]["task_id"])
+                state["repository_context"] = await _generate_repository_snapshot(state, sandbox)
+                _record_event(state, "progress",
+                              "返工模式：已刷新仓库代码快照", "develop_changes")
+            except Exception:
+                pass
+
+        last_test = (state.get("sandbox_results") or [])[-1] if state.get("sandbox_results") else None
+        if last_test and last_test.get("test_summary", {}).get("failed", 0) > 0:
+            stdout = last_test.get("stdout", "") or ""
+            import re as _re
+            # Extract each FAILED block with its assertion error
+            failed_blocks = _re.findall(
+                r'(FAILED\s+\S+.*?(?=FAILED|\Z))',
+                stdout, _re.DOTALL
+            )
+            # Take up to 10 failures, 500 chars each
+            failure_details = [b.strip()[:500] for b in failed_blocks[:10]]
+            # Accumulate rework history across iterations
+            prev = state.get("rework_context") or {}
+            prev_failures = prev.get("failure_details", [])
+            prev_rounds = prev.get("rounds", [])
+            state["rework_context"] = {
+                "failed_count": last_test["test_summary"]["failed"],
+                "failed_tests": _re.findall(r'FAILED\s+(\S+)', stdout)[:20],
+                "failure_details": failure_details,
+                "rounds": prev_rounds + [{
+                    "round": state.get("iteration", 0),
+                    "failed_count": last_test["test_summary"]["failed"],
+                    "failed_tests": _re.findall(r'FAILED\s+(\S+)', stdout)[:20],
+                    "details": failure_details,
+                }],
+            }
+            _record_event(state, "progress",
+                          f"返工模式：向 Developer 提供 {len(failure_details)} 条测试失败详情"
+                          f"（累计 {len(state['rework_context']['rounds'])} 轮）",
+                          "develop_changes")
+
     _record_event(state, "node_start", "开始代码开发", "develop_changes")
     state = await agent_node(state, DeveloperAgent())
     if state.get("phase") == "failed":
@@ -270,6 +360,11 @@ async def apply_patches(state: TeamState) -> TeamState:
 
     task_id = state["task_meta"]["task_id"]
     patches = state.get("patches") or []
+
+    if not patches:
+        _record_event(state, "error", "Developer 未生成任何 patch，无法继续", "apply_patches")
+        state["phase"] = "failed"
+        return state
 
     try:
         sandbox = get_sandbox(task_id)
@@ -456,6 +551,55 @@ sys.exit(1)
                         _record_event(state, "progress",
                                       f"Patch {i} ({file_path}) 字符串替换成功 ({r.stdout.strip()})",
                                       "apply_patches")
+                    elif "NOT_FOUND" in r.stdout and patched_snippet and file_path:
+                        # Phase 4: All match tiers failed — overwrite file directly.
+                        # This handles files that have been modified by previous
+                        # rework iterations so original_snippet no longer matches.
+                        target = f"repo/{file_path}"
+                        overwrite_script = _Path(_tempfile.gettempdir()) / f"devflow-overwrite-{task_id}-{i}.py"
+                        overwrite_script.write_text(f"""\
+import os
+target = {_json.dumps(target)}
+patched = {_json.dumps(patched_snippet)}
+content = ""
+try:
+    with open(target, "r", encoding="utf-8") as f:
+        content = f.read()
+except FileNotFoundError:
+    pass
+# Preserve imports and top-level docstring from existing file
+head_lines = []
+for line in content.split("\\n")[:20]:
+    stripped = line.strip()
+    if line.startswith(("import ", "from ", "#!", "# -*-")) or stripped == "":
+        head_lines.append(line)
+    elif stripped.startswith(('\"\"\"', \"'''\")):
+        head_lines.append(line)
+        if stripped.count('\"\"\"') == 2 or stripped.count(\"'''\") == 2:
+            continue
+    elif line.startswith(("def ", "class ", "@", "async ")):
+        break
+preface = "\\n".join(head_lines).rstrip()
+full = (preface + "\\n\\n" + patched) if preface else patched
+parent = os.path.dirname(target)
+if parent:
+    os.makedirs(parent, exist_ok=True)
+with open(target, "w", encoding="utf-8") as f:
+    f.write(full)
+print("OK_OVERWRITE")
+""", encoding="utf-8")
+                        ow = await _sandbox_call(sandbox, f"python {overwrite_script}", timeout=15)
+                        overwrite_script.unlink(missing_ok=True)
+                        if ow.exit_code == 0:
+                            applied = True
+                            _record_event(state, "progress",
+                                          f"Patch {i} ({file_path}) 整文件覆写成功 (OVERWRITE)",
+                                          "apply_patches")
+                        else:
+                            _record_event(state, "error",
+                                          f"Patch {i} ({file_path}) 应用失败: git apply + 字符串替换均失败. "
+                                          f"stdout=[{r.stdout.strip()[:200]}] stderr=[{r.stderr.strip()[:200]}]",
+                                          "apply_patches")
                     else:
                         _record_event(state, "error",
                                       f"Patch {i} ({file_path}) 应用失败: git apply + 字符串替换均失败. "
@@ -575,11 +719,17 @@ async def run_tests(state: TeamState) -> TeamState:
                 is_new_failure=True,
             ).model_dump())
 
+        # pytest exit code 5 = "no tests collected" — this is a warning, not success
+        if r.exit_code == 5:
+            _record_event(state, "error",
+                          "pytest 未发现测试用例 (exit code 5)——检查测试文件是否存在",
+                          "run_tests")
+
         result = SandboxResult(
             execution_id=execution_id,
             task_id=task_id,
             sandbox_type="test",
-            status="success" if r.exit_code in {0, 5} and not r.timed_out else "failure",
+            status="success" if r.exit_code == 0 and not r.timed_out else "failure",
             exit_code=r.exit_code,
             timed_out=r.timed_out,
             duration_ms=duration_ms,
@@ -651,7 +801,10 @@ async def review_code(state: TeamState) -> TeamState:
                 "description": "计算器实现缺少可验证的加法和减法能力",
                 "suggestion": "实现 add 和 subtract（或等价运算接口），并补充相应测试。",
             })
-            review_result["actionable_feedback"] = "当前产物不是可用计算器。实现加法与减法运算及测试，不能用占位 Hello World 替代。"
+            review_result["actionable_feedback"] = (
+                "当前产物不是可用计算器。实现加法与减法运算及测试，"
+                "不能用占位 Hello World 替代。"
+            )
             state["review"]["result"] = review_result
     state["phase"] = "security_check"
     _record_event(state, "node_complete", "代码审查完成", "review_code")
@@ -715,7 +868,7 @@ async def await_approval(state: TeamState) -> TeamState:
         state["phase"] = "done"
         _record_event(state, "progress", "审批已通过", "await_approval")
     else:
-        state["iteration"] = state.get("iteration", 0) + 1
+        # iteration is incremented by develop_changes when it runs next
         state["approval_required"] = False
         state["phase"] = "developing"
         _record_event(state, "progress", "审批被拒绝，开始返工", "await_approval")
@@ -745,10 +898,10 @@ async def handle_error(state: TeamState) -> TeamState:
         "recoverable": state.get("iteration", 0) < state.get("max_iterations", 3),
         "retry_count": state.get("iteration", 0),
     })
-    if state["iteration"] >= state["max_iterations"]:
+    if state.get("iteration", 0) >= state.get("max_iterations", 3):
         state["phase"] = "failed"
     else:
-        state["iteration"] = state.get("iteration", 0) + 1
+        # iteration is incremented by develop_changes when it runs next
         state["phase"] = "developing"  # 返工
     _record_event(state, "error", f"工作流错误 ({recent_node}): {last_error_msg[:80]}", "handle_error")
     if state["phase"] == "failed":
@@ -766,8 +919,8 @@ async def finalize(state: TeamState) -> TeamState:
         # Preserve a tangible project artifact before cleaning the temporary
         # sandbox.  LocalSandbox exposes its task workspace; other backends
         # continue to use the remote publication path below.
-        from pathlib import Path
         import shutil
+        from pathlib import Path
 
         workspace = getattr(get_sandbox(task_id), "_workspace", None)
         repo_path = Path(workspace) / "repo" if workspace else None
@@ -779,7 +932,12 @@ async def finalize(state: TeamState) -> TeamState:
             state["artifact"] = {"name": f"devflow-{task_id}.zip", "path": archive_path}
             _record_event(state, "progress", "项目压缩包已生成", "finalize")
 
-        if state["task_meta"].get("publish_to_remote", False) and not state.get("cancel_requested", False):
+        should_publish = (
+            state["task_meta"].get("publish_to_remote", False)
+            and not state.get("cancel_requested", False)
+            and not _USE_MOCK_SANDBOX
+        )
+        if should_publish:
             sandbox = get_sandbox(task_id)
             status = await _sandbox_call(sandbox, "git status --porcelain", cwd="repo")
             if status.exit_code != 0 or not status.stdout.strip():
@@ -941,12 +1099,13 @@ def build_graph(checkpointer=None):
 
     # --- 注册边 ---
     builder.set_entry_point("init_task")
-    builder.add_edge("init_task", "analyze_requirement")
 
-    # Clone and index the repository before planning so Planner tool calls can
-    # inspect the real checkout. Developer then uses the same task sandbox.
-    builder.add_edge("analyze_requirement", "setup_workspace")
-    builder.add_edge("setup_workspace", "plan_solution")
+    # Clone the repository first so the Requirement Analyzer and Planner
+    # can browse real code.  setup_workspace collects repository_context
+    # which both agents inject into their prompts.
+    builder.add_edge("init_task", "setup_workspace")
+    builder.add_edge("setup_workspace", "analyze_requirement")
+    builder.add_edge("analyze_requirement", "plan_solution")
     builder.add_edge("plan_solution", "develop_changes")
     builder.add_edge("develop_changes", "apply_patches")
     builder.add_conditional_edges(

@@ -28,7 +28,13 @@ class RequirementAgent(AgentBase):
 
     def build_context(self, state: TeamState) -> str:
         meta = state.get("task_meta", {})
-        return f"用户需求：\n{meta.get('requirement', '')}"
+        ctx = f"仓库地址：{meta.get('repo_url', '')}\n"
+        ctx += f"分支：{meta.get('branch', 'main')}\n"
+        ctx += f"用户需求：\n{meta.get('requirement', '')}\n"
+        repo = state.get("repository_context", "")
+        if repo:
+            ctx += f"\n仓库代码结构：\n{repo[:5000]}\n"
+        return ctx
 
     def mock_result(self, state: TeamState) -> AgentResult:
         meta = state.get("task_meta", {})
