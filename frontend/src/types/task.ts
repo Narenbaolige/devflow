@@ -262,7 +262,7 @@ export const WORKFLOW_NODES: NodeConfig[] = [
   { key: "plan_solution",      label: "方案规划",   icon: "📝", agentRole: "planner" },
   { key: "develop_changes",    label: "代码生成",   icon: "💻", agentRole: "developer" },
   { key: "run_tests",          label: "运行测试",   icon: "🧪", agentRole: null },
-  { key: "review_changes",     label: "代码审查",   icon: "🔍", agentRole: "reviewer" },
+  { key: "review_code",        label: "代码审查",   icon: "🔍", agentRole: "reviewer" },
   { key: "security_check",     label: "安全检查",   icon: "🛡️", agentRole: "security" },
   { key: "await_approval",     label: "等待审批",   icon: "⏸️", agentRole: null },
 ];

@@ -17,14 +17,14 @@ import type { SandboxResult, PatchResult } from "../../types/task";
 import styles from "./TaskDetail.module.css";
 
 const NODE_ICONS: Record<string, string> = {
-  init_task: "○",
-  analyze_requirement: "①",
-  create_plan: "②",
-  develop_changes: "③",
-  run_tests: "④",
-  review_changes: "⑤",
-  security_check: "⑥",
-  await_approval: "⑦",
+  init_task: "1",
+  analyze_requirement: "2",
+  plan_solution: "3",
+  develop_changes: "4",
+  run_tests: "5",
+  review_code: "6",
+  security_check: "7",
+  await_approval: "8",
 };
 
 export default function TaskDetail() {
