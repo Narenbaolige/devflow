@@ -9,27 +9,23 @@
 
 .label {
   font-size: 11px;
-  color: #3D4347;
-  margin-bottom: 8px;
+  color: #333;
+  margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   font-weight: 600;
+  font-family: var(--font-ui);
 }
 
 .value {
-  font-family: var(--font-brand);
-  font-size: 28px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.8px;
-  line-height: 1.2;
-  color: #111416;
-  word-break: break-all;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #000;
+  font-family: var(--font-ui);
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
 }
 
-.unit { font-size: 13px; font-weight: 500; color: #4A5054; margin-left: 3px; }
+.unit { font-size: 13px; font-weight: 500; color: #444; margin-left: 3px; }
