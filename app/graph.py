@@ -314,7 +314,6 @@ async def develop_changes(state: TeamState) -> TeamState:
             failure_details = [b.strip()[:500] for b in failed_blocks[:10]]
             # Accumulate rework history across iterations
             prev = state.get("rework_context") or {}
-            prev_failures = prev.get("failure_details", [])
             prev_rounds = prev.get("rounds", [])
             state["rework_context"] = {
                 "failed_count": last_test["test_summary"]["failed"],
