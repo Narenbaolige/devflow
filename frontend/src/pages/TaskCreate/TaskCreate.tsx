@@ -27,15 +27,13 @@ export default function TaskCreate() {
   const [recentTasks, setRecentTasks] = useState<TaskResponse[]>([]);
 
   useEffect(() => {
-    listTasks(5, 0)
-      .then((res) => setRecentTasks(res.tasks))
-      .catch(() => {});
+    listTasks(5, 0).then((res) => setRecentTasks(res.tasks)).catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!requirement.trim()) { setError("Please describe your requirement"); return; }
-    if (!repoUrl.trim()) { setError("Please enter a repository URL"); return; }
+    if (!requirement.trim()) { setError("请输入需求描述"); return; }
+    if (!repoUrl.trim()) { setError("请输入仓库地址"); return; }
     setSubmitting(true);
     setError(null);
     try {
@@ -50,7 +48,7 @@ export default function TaskCreate() {
       });
       navigate(`/tasks/${task.task_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task");
+      setError(err instanceof Error ? err.message : "创建失败，请检查后端服务");
     } finally {
       setSubmitting(false);
     }
@@ -58,25 +56,24 @@ export default function TaskCreate() {
 
   return (
     <div className={styles.container}>
-      {/* 渐变装饰 */}
       <div className={styles.gradientBar} />
 
       <div className={styles.header}>
-        <h1>Start a new task</h1>
-        <p>Describe what you need — the agent pipeline will analyze, plan, code, test, and review automatically.</p>
+        <h1>创建新任务</h1>
+        <p>描述你的需求，Agent 流水线将自动完成分析、规划、编码、测试与审查</p>
       </div>
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <div className={styles.field}>
-          <label className={styles.label}>Requirement</label>
+          <label className={styles.label}>需求描述</label>
           <textarea className={styles.textarea} value={requirement}
             onChange={(e) => setRequirement(e.target.value)}
-            placeholder="e.g. Add input validation to the factorial function"
+            placeholder="例如：给 factorial 函数添加参数校验"
             rows={3} disabled={submitting} />
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Repository URL</label>
+          <label className={styles.label}>仓库地址</label>
           <input className={styles.input} type="text" value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
             placeholder="https://github.com/..." disabled={submitting} />
@@ -84,37 +81,37 @@ export default function TaskCreate() {
 
         <details className={styles.advanced}>
           <summary className={styles.advancedTitle}>
-            <ChevronDown size={14} /> Advanced options
+            <ChevronDown size={14} /> 高级选项
           </summary>
           <div className={styles.advancedGrid}>
             <div className={styles.field}>
-              <label className={styles.label}>Branch</label>
+              <label className={styles.label}>目标分支</label>
               <input className={styles.input} type="text" value={branch}
                 onChange={(e) => setBranch(e.target.value)} disabled={submitting} />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>Max iterations</label>
+              <label className={styles.label}>最大迭代次数</label>
               <input className={styles.input} type="number" min={1} max={10}
                 value={maxIterations} onChange={(e) => setMaxIterations(Number(e.target.value))}
                 disabled={submitting} />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>Timeout (seconds)</label>
+              <label className={styles.label}>超时时间（秒）</label>
               <input className={styles.input} type="number" min={1} max={3600}
                 value={timeoutSeconds} onChange={(e) => setTimeoutSeconds(Number(e.target.value))}
                 disabled={submitting} />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>Budget limit (USD)</label>
+              <label className={styles.label}>预算上限（美元）</label>
               <input className={styles.input} type="number" min={0} step={0.001}
                 value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)}
-                placeholder="Unlimited" disabled={submitting} />
+                placeholder="不限制" disabled={submitting} />
             </div>
           </div>
           <label className={styles.publishOption}>
             <input type="checkbox" checked={publishToRemote}
               onChange={(e) => setPublishToRemote(e.target.checked)} disabled={submitting} />
-            Push to remote repository after verification
+            验证通过后推送到远程仓库
           </label>
         </details>
 
@@ -122,13 +119,13 @@ export default function TaskCreate() {
 
         <button className={styles.submitBtn} type="submit" disabled={submitting}>
           <Send size={16} />
-          {submitting ? "Creating..." : "Create task"}
+          {submitting ? "正在创建..." : "创建任务"}
         </button>
       </form>
 
       {recentTasks.length > 0 && (
         <div className={styles.recentSection}>
-          <h3>Recent tasks</h3>
+          <h3>最近任务</h3>
           <div className={styles.recentList}>
             {recentTasks.map((t) => (
               <div key={t.task_id} className={styles.recentItem}
@@ -151,6 +148,6 @@ export default function TaskCreate() {
 function fmtTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
   } catch { return ""; }
 }

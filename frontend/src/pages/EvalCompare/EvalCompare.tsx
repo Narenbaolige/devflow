@@ -10,14 +10,14 @@ import type { TaskStatsResponse } from "../../types/task";
 import styles from "./EvalCompare.module.css";
 
 const COMPARISON_DATA = [
-  { metric: "Success rate",        single: "60%",          multi: "90%",          gain: "+30%",  winner: "multi" as const },
-  { metric: "First-pass rate",     single: "45%",          multi: "75%",          gain: "+30%",  winner: "multi" as const },
-  { metric: "Avg iterations",      single: "1.0",          multi: "1.8",          gain: "—",     winner: "—" as const },
-  { metric: "Avg tokens",          single: "2,130",        multi: "7,925",        gain: "3.7x",  winner: "single" as const },
-  { metric: "Avg cost",            single: "$0.0004",      multi: "$0.0013",      gain: "3.1x",  winner: "single" as const },
-  { metric: "Avg duration",        single: "8.1s",         multi: "18.5s",        gain: "2.3x",  winner: "single" as const },
-  { metric: "Rework corrections",  single: "N/A",          multi: "3",            gain: "unique", winner: "multi" as const },
-  { metric: "Issues detected",    single: "N/A",          multi: "12",           gain: "unique", winner: "multi" as const },
+  { metric: "成功率",        single: "60%",          multi: "90%",          gain: "+30%",  winner: "multi" as const },
+  { metric: "首次通过率",    single: "45%",          multi: "75%",          gain: "+30%",  winner: "multi" as const },
+  { metric: "平均迭代次数",  single: "1.0",          multi: "1.8",          gain: "—",     winner: "—" as const },
+  { metric: "平均 Token",    single: "2,130",        multi: "7,925",        gain: "3.7x",  winner: "single" as const },
+  { metric: "平均成本",      single: "$0.0004",      multi: "$0.0013",      gain: "3.1x",  winner: "single" as const },
+  { metric: "平均耗时",      single: "8.1s",         multi: "18.5s",        gain: "2.3x",  winner: "single" as const },
+  { metric: "返工修正次数",  single: "N/A",          multi: "3",            gain: "唯一",  winner: "multi" as const },
+  { metric: "审查发现问题",  single: "N/A",          multi: "12",           gain: "唯一",  winner: "multi" as const },
 ];
 
 const BAR_DATA = [
@@ -29,11 +29,11 @@ const BAR_DATA = [
 ];
 
 const RADAR_DATA = [
-  { dimension: "Success rate",     single: 60, multi: 90, fullMark: 100 },
-  { dimension: "First-pass rate",  single: 45, multi: 75, fullMark: 100 },
-  { dimension: "Code quality",     single: 55, multi: 85, fullMark: 100 },
-  { dimension: "Security",         single: 0,  multi: 80, fullMark: 100 },
-  { dimension: "Regression guard", single: 0,  multi: 70, fullMark: 100 },
+  { dimension: "成功率",     single: 60, multi: 90, fullMark: 100 },
+  { dimension: "首次通过率", single: 45, multi: 75, fullMark: 100 },
+  { dimension: "代码质量",   single: 55, multi: 85, fullMark: 100 },
+  { dimension: "安全检测",   single: 0,  multi: 80, fullMark: 100 },
+  { dimension: "回归防护",   single: 0,  multi: 70, fullMark: 100 },
 ];
 
 export default function EvalCompare() {
@@ -46,19 +46,19 @@ export default function EvalCompare() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>Evaluation</h1>
-        <p>Single-agent vs multi-agent ablation study</p>
+        <h1>评测对比</h1>
+        <p>单 Agent vs 多 Agent 消融实验</p>
       </div>
 
       <div className={styles.statsRow}>
-        <StatsCard label="Total tasks" value={stats?.total_tasks ?? 40} color="var(--text-primary)" />
-        <StatsCard label="Completed" value={stats ? `${stats.completed_tasks}` : "90%"} color="var(--accent)" />
-        <StatsCard label="Avg duration" value={stats ? (stats.average_duration_ms / 1000).toFixed(1) : "15.2"} unit="s" color="var(--blue)" />
-        <StatsCard label="Total cost" value={stats ? stats.total_cost_usd.toFixed(4) : "0.0261"} unit="USD" color="var(--text-primary)" />
+        <StatsCard label="总任务数" value={stats?.total_tasks ?? 40} color="var(--text-primary)" />
+        <StatsCard label="完成数" value={stats ? `${stats.completed_tasks}` : "90%"} color="var(--accent)" />
+        <StatsCard label="平均耗时" value={stats ? (stats.average_duration_ms / 1000).toFixed(1) : "15.2"} unit="s" color="var(--blue)" />
+        <StatsCard label="总成本" value={stats ? stats.total_cost_usd.toFixed(4) : "0.0261"} unit="USD" color="var(--text-primary)" />
       </div>
 
       <div className={styles.section}>
-        <h3>Success rate by category</h3>
+        <h3>各类别成功率对比</h3>
         <div className={styles.chartBox}>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={BAR_DATA} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -67,23 +67,23 @@ export default function EvalCompare() {
               <YAxis stroke="#9AAAA8" fontSize={12} domain={[0, 100]} unit="%" />
               <Tooltip contentStyle={{ background: "#FFF", border: "1px solid #E2EEEB", borderRadius: 8 }} />
               <Legend />
-              <Bar dataKey="single" name="Single Agent" fill="#9AAAA8" radius={[4,4,0,0]} />
-              <Bar dataKey="multi" name="Multi Agent" fill="#2FD98A" radius={[4,4,0,0]} />
+              <Bar dataKey="single" name="单 Agent" fill="#9AAAA8" radius={[4,4,0,0]} />
+              <Bar dataKey="multi" name="多 Agent" fill="#2FD98A" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className={styles.section}>
-        <h3>Multi-dimensional comparison</h3>
+        <h3>多维度能力对比</h3>
         <div className={styles.chartBox}>
           <ResponsiveContainer width="100%" height={320}>
             <RadarChart data={RADAR_DATA}>
               <PolarGrid stroke="#E2EEEB" />
               <PolarAngleAxis dataKey="dimension" stroke="#6B7B7A" fontSize={12} />
               <PolarRadiusAxis stroke="#9AAAA8" fontSize={11} domain={[0, 100]} />
-              <Radar name="Single Agent" dataKey="single" stroke="#9AAAA8" fill="#9AAAA8" fillOpacity={0.15} />
-              <Radar name="Multi Agent" dataKey="multi" stroke="#2FD98A" fill="#2FD98A" fillOpacity={0.25} />
+              <Radar name="单 Agent" dataKey="single" stroke="#9AAAA8" fill="#9AAAA8" fillOpacity={0.15} />
+              <Radar name="多 Agent" dataKey="multi" stroke="#2FD98A" fill="#2FD98A" fillOpacity={0.25} />
               <Legend />
             </RadarChart>
           </ResponsiveContainer>
@@ -91,10 +91,10 @@ export default function EvalCompare() {
       </div>
 
       <div className={styles.section}>
-        <h3>Metrics detail</h3>
+        <h3>指标明细</h3>
         <table className={styles.table}>
           <thead>
-            <tr><th>Metric</th><th>Single Agent</th><th>Multi Agent</th><th>Gain</th></tr>
+            <tr><th>指标</th><th>单 Agent</th><th>多 Agent</th><th>增益</th></tr>
           </thead>
           <tbody>
             {COMPARISON_DATA.map((row) => (
@@ -110,24 +110,24 @@ export default function EvalCompare() {
       </div>
 
       <div className={styles.section}>
-        <h3>Key findings</h3>
+        <h3>关键发现</h3>
         <div className={styles.findings}>
           <div className={styles.finding}>
             <div>
-              <strong>Multi-agent excels on complex tasks</strong>
-              <p>For bug_fix and refactor categories, the reviewer rework loop corrected 3 patches that single-agent missed on first attempt.</p>
+              <strong>复杂任务上多 Agent 优势显著</strong>
+              <p>对于 bug_fix 和 refactor 类别，Reviewer 返工循环修正了 3 个单 Agent 首次即失败的 patch。</p>
             </div>
           </div>
           <div className={styles.finding}>
             <div>
-              <strong>Single-agent is more economical for simple fixes</strong>
-              <p>For simple_fix tasks, single-agent costs one-third of multi-agent. Recommend selecting mode by task complexity.</p>
+              <strong>简单任务单 Agent 更经济</strong>
+              <p>simple_fix 类任务单 Agent 成本仅多 Agent 的 1/3，建议按复杂度自动选择模式。</p>
             </div>
           </div>
           <div className={styles.finding}>
             <div>
-              <strong>Security review is irreplaceable</strong>
-              <p>Multi-agent detected 2 potential vulnerabilities (path traversal, hardcoded secrets) that single-agent missed entirely.</p>
+              <strong>安全审查不可替代</strong>
+              <p>多 Agent 检测到 2 个潜在漏洞（路径遍历、硬编码密钥），单 Agent 完全遗漏。</p>
             </div>
           </div>
         </div>
