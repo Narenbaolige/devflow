@@ -4,7 +4,7 @@
 
 **DevFlow** 是一个 AI 驱动的自动化软件工程系统。给定一个需求描述和代码仓库，五个专用 Agent 协同工作，完成从需求理解到代码审查的完整开发闭环。支持返工循环、中断审批、Checkpoint 恢复和实时事件流。
 
-> 📂 测试仓库（含 79 个 AI 生成实例）：[github.com/Narenbaolige/devflow-test-repo](https://github.com/Narenbaolige/devflow-test-repo)
+> 📂 测试仓库（含 AI 生成实例）：[github.com/Narenbaolige/devflow-test-repo](https://github.com/Narenbaolige/devflow-test-repo)
 
 ---
 
