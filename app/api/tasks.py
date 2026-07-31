@@ -12,9 +12,11 @@
 
 import asyncio
 import json
+import hashlib
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query
@@ -28,11 +30,72 @@ from contracts.state import create_initial_state
 router = APIRouter()
 
 # =============================================================================
-# 内存缓存只用于当前进程加速。任务列表的真实来源是 LangGraph Checkpointer，
-# 因而 PostgreSQL 模式在服务重启后仍可列出历史任务。
+# 任务持久化 — 本地 JSON 文件，服务重启后可恢复历史任务。
+# MemorySaver 的 checkpoint 重启即丢失，JSON 文件作为补充持久层。
 # =============================================================================
 
-_tasks_store: dict[str, dict] = {}
+_TASKS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "tasks"
+_STORE_FILE = lambda task_id: _TASKS_DIR / f"{task_id}.json"
+
+# 跳过存储的临时字段（运行时重新生成，不需要持久化）
+_SKIP_FIELDS = frozenset({"repository_context"})
+
+
+def _load_all_tasks() -> dict[str, dict]:
+    """启动时从本地 JSON 文件恢复所有任务状态。"""
+    store: dict[str, dict] = {}
+    if not _TASKS_DIR.is_dir():
+        return store
+    for f in sorted(_TASKS_DIR.glob("*.json")):
+        try:
+            state = json.loads(f.read_text("utf-8"))
+            task_id = state.get("task_meta", {}).get("task_id") or f.stem
+            store[task_id] = state
+        except (json.JSONDecodeError, OSError):
+            pass
+    return store
+
+
+def _state_hash(state: dict) -> str:
+    """state 关键字段的快速哈希，用于跳过无变化的写盘。"""
+    h = hashlib.sha1()
+    for key in ("phase", "iteration", "budget_used_usd", "current_node", "events"):
+        val = state.get(key)
+        if isinstance(val, list):
+            h.update(str(len(val)).encode())
+        elif val is not None:
+            h.update(str(val).encode())
+    for err in state.get("errors", [])[-2:]:
+        h.update(json.dumps(err, sort_keys=True, default=str).encode())
+    return h.hexdigest()
+
+
+async def _persist_task(task_id: str, state: dict) -> None:
+    """更新内存缓存并异步写盘，跳过 repository_context 大字段。"""
+    _tasks_store[task_id] = state
+
+    # 终态不可逆——跳过写盘避免重复 I/O
+    phase = state.get("phase", "")
+    new_hash = _state_hash(state)
+    prev_hash = _state_hashes.get(task_id)
+    if phase in _terminal_phases and prev_hash is not None:
+        return
+    if new_hash == prev_hash:
+        return
+    _state_hashes[task_id] = new_hash
+
+    record = {k: v for k, v in state.items() if k not in _SKIP_FIELDS}
+    _TASKS_DIR.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(
+        lambda: _STORE_FILE(task_id).write_text(
+            json.dumps(record, ensure_ascii=False, default=str), "utf-8",
+        )
+    )
+
+
+_tasks_store: dict[str, dict] = _load_all_tasks()
+_state_hashes: dict[str, str] = {}
+_terminal_phases = frozenset({"done", "failed", "cancelled"})
 _running_tasks: dict[str, asyncio.Task] = {}
 
 
@@ -56,7 +119,7 @@ async def _checkpoint_state(task_id: str) -> dict | None:
     snapshot = await workflow.graph.aget_state(config)
     if snapshot and snapshot.values:
         state = dict(snapshot.values)
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         return state
     return _tasks_store.get(task_id)
 
@@ -85,12 +148,24 @@ async def _checkpoint_task_states() -> list[dict]:
                 continue
             seen_task_ids.add(task_id)
             state = dict(values)
-            _tasks_store[task_id] = state
+            await _persist_task(task_id, state)
             states.append(state)
     except (AttributeError, TypeError):
         # 自定义 checkpointer 未实现全量枚举时，仍保持本地开发可用。
-        return list(_tasks_store.values())
+        pass
 
+    # API 创建的任务通过 _execute_task_pipeline 直接调用节点，不经过
+    # LangGraph ainvoke，不会产生 checkpoint。补上仅存在于 _tasks_store 中
+    # 的任务（来自 JSON 文件恢复或进程内存）。
+    for task_id, state in _tasks_store.items():
+        if task_id not in seen_task_ids:
+            states.append(state)
+
+    # 按创建时间倒序（最新的在前）
+    states.sort(
+        key=lambda s: s.get("task_meta", {}).get("created_at", ""),
+        reverse=True,
+    )
     return states
 
 
@@ -248,14 +323,14 @@ async def _execute_task_pipeline(task_id: str, state: dict) -> dict:
     """
     for node in (workflow.init_task, workflow.setup_workspace, workflow.analyze_requirement, workflow.plan_solution):
         state = await node(state)
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         if state.get("phase") in {"failed", "cancelled", "awaiting_approval"}:
             return state
 
     while True:
         for node in (workflow.develop_changes, workflow.apply_patches, workflow.run_tests):
             state = await node(state)
-            _tasks_store[task_id] = state
+            await _persist_task(task_id, state)
             if state.get("phase") in {"failed", "cancelled", "awaiting_approval"}:
                 return state
 
@@ -263,26 +338,26 @@ async def _execute_task_pipeline(task_id: str, state: dict) -> dict:
             continue
         if workflow.route_after_test(state) != "review_code":
             state = await workflow.handle_error(state)
-            _tasks_store[task_id] = state
+            await _persist_task(task_id, state)
             return state
 
         state = await workflow.review_code(state)
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         if workflow.route_after_review(state) == "develop_changes":
             continue
         if workflow.route_after_review(state) != "security_check":
             state = await workflow.handle_error(state)
-            _tasks_store[task_id] = state
+            await _persist_task(task_id, state)
             return state
 
         state = await workflow.security_check(state)
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         if state.get("phase") == "awaiting_approval":
             return state
         if state.get("phase") != "done":
             return state
         state = await workflow.finalize(state)
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         return state
 
 
@@ -292,7 +367,7 @@ async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> 
     try:
         pipeline = _execute_task_pipeline(task_id, initial_state)
         result = await asyncio.wait_for(pipeline, timeout=timeout_seconds) if timeout_seconds else await pipeline
-        _tasks_store[task_id] = result
+        await _persist_task(task_id, result)
     except TimeoutError:
         state = await _checkpoint_state(task_id) or initial_state
         state["phase"] = "failed"
@@ -304,7 +379,7 @@ async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> 
             "recoverable": False,
             "retry_count": state.get("iteration", 0),
         })
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         try:
             await workflow.graph.aupdate_state(config, state)
         except Exception:
@@ -331,7 +406,7 @@ async def _run_task(task_id: str, initial_state: dict, timeout_seconds: int) -> 
             "timestamp": datetime.now().isoformat(),
             "message": state["errors"][-1]["message"], "data": {"phase": "failed"},
         })
-        _tasks_store[task_id] = state
+        await _persist_task(task_id, state)
         try:
             await workflow.graph.aupdate_state(config, state)
         except Exception:
@@ -378,7 +453,7 @@ async def create_task(req: CreateTaskRequest):
         "data": {"phase": "init"},
     })
 
-    _tasks_store[task_id] = initial_state
+    await _persist_task(task_id, initial_state)
     _running_tasks[task_id] = asyncio.create_task(
         _run_task(task_id, initial_state, req.timeout_seconds), name=f"devflow-{task_id}"
     )
@@ -454,7 +529,7 @@ async def approve_task(task_id: str, req: ApproveRequest = ApproveRequest()):
     state = await workflow.await_approval(state)
     if state.get("phase") == "done":
         state = await workflow.finalize(state)
-    _tasks_store[task_id] = state
+    await _persist_task(task_id, state)
     return _to_response(state)
 
 
@@ -474,7 +549,7 @@ async def reject_task(task_id: str, req: ApproveRequest = ApproveRequest()):
     state["approval_granted"] = False
     state["approval_feedback"] = req.feedback
     state = await workflow.await_approval(state)
-    _tasks_store[task_id] = state
+    await _persist_task(task_id, state)
     if state.get("phase") == "developing":
         _running_tasks[task_id] = asyncio.create_task(
             _execute_task_pipeline(task_id, state), name=f"devflow-rework-{task_id}"
@@ -505,7 +580,7 @@ async def cancel_task(task_id: str):
     except Exception:
         # 若任务尚未来得及写入首个 checkpoint，本地状态仍可被立即查询。
         pass
-    _tasks_store[task_id] = state
+    await _persist_task(task_id, state)
     return _to_response(state)
 
 

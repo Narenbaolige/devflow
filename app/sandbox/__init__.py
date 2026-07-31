@@ -37,12 +37,13 @@ def create_sandbox() -> BaseSandbox:
     """
     mode = os.getenv("SANDBOX_MODE", "local").lower()
 
+    log_dir = os.getenv("SANDBOX_LOG_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
     if mode == "docker":
         from app.sandbox.docker import DockerSandbox
-        return DockerSandbox()
+        return DockerSandbox(log_dir=log_dir)
     else:
         from app.sandbox.local import LocalSandbox
-        return LocalSandbox()
+        return LocalSandbox(log_dir=log_dir)
 
 
 __all__ = ["BaseSandbox", "CommandResult", "create_sandbox"]

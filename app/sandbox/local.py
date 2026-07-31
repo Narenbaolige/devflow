@@ -106,7 +106,7 @@ class LocalSandbox(BaseSandbox):
             cmd_result = CommandResult(
                 exit_code=-1,
                 stdout="",
-                stderr=f"命令超时 ({timeout}s): {command[:80]}",
+                stderr=f"命令超时 ({timeout or '∞'}s): {command[:80]}",
                 timed_out=True,
                 duration_ms=duration_ms,
                 warnings=warnings,

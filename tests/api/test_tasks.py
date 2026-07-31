@@ -65,9 +65,9 @@ class TestTaskEndpoints:
         assert "tasks" in data
         assert "total" in data
 
-    def test_list_tasks_reads_checkpointer_after_memory_cache_is_cleared(self, client):
-        """列表不应依赖进程内缓存，模拟重启后仍可枚举 checkpoint 任务。"""
-        from app.api.tasks import _tasks_store
+    def test_list_tasks_survives_memory_clear(self, client):
+        """任务列表应能通过 JSON 持久化恢复——清空内存缓存后重新加载即可列出。"""
+        from app.api import tasks as api_tasks
 
         create_resp = client.post("/tasks", json={
             "requirement": "验证持久化任务列表",
@@ -75,7 +75,11 @@ class TestTaskEndpoints:
         })
         task_id = create_resp.json()["task_id"]
 
-        _tasks_store.clear()
+        # 模拟重启：清空内存缓存并从文件重新加载
+        api_tasks._tasks_store.clear()
+        api_tasks._state_hashes.clear()
+        api_tasks._tasks_store.update(api_tasks._load_all_tasks())
+
         response = client.get("/tasks")
         assert response.status_code == 200
         assert any(task["task_id"] == task_id for task in response.json()["tasks"])

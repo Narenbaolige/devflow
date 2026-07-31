@@ -21,35 +21,37 @@ from pydantic import BaseModel, Field
 # =============================================================================
 
 _sandbox_logger = logging.getLogger("devflow.sandbox")
+_file_handler_added = False
 
 
 def _setup_logger(log_dir: str | Path | None = None) -> None:
     """初始化沙箱日志：控制台 + 可选 JSON 文件。"""
-    if _sandbox_logger.handlers:
-        return
+    global _file_handler_added
 
     _sandbox_logger.setLevel(logging.DEBUG)
 
-    # 控制台：简洁
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter("[%(asctime)s] %(message)s", datefmt="%H:%M:%S"))
-    _sandbox_logger.addHandler(ch)
+    # 控制台：只加一次
+    if not _sandbox_logger.handlers:
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        ch.setFormatter(logging.Formatter("[%(asctime)s] %(message)s", datefmt="%H:%M:%S"))
+        _sandbox_logger.addHandler(ch)
 
-    # JSON 文件：完整
-    if log_dir:
+    # JSON 文件：只加一次，但补传 log_dir 时也能追加
+    if log_dir and not _file_handler_added:
         log_dir = Path(log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
         fh = logging.FileHandler(log_dir / "sandbox.jsonl", encoding="utf-8")
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(logging.Formatter("%(message)s"))
         _sandbox_logger.addHandler(fh)
+        _file_handler_added = True
 
 
 def _log_execute(
     command: str,
     cwd: str,
-    timeout: int,
+    timeout: int | None,
     exit_code: int,
     duration_ms: int,
     timed_out: bool,
@@ -65,7 +67,7 @@ def _log_execute(
         "backend": backend,
         "command": command[:200],
         "cwd": cwd,
-        "timeout": timeout,
+        "timeout": timeout if timeout is not None else 0,
         "exit_code": exit_code,
         "duration_ms": duration_ms,
         "timed_out": timed_out,
