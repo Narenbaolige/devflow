@@ -477,6 +477,15 @@ class AgentBase(ABC):
         tool_call_count = 0
         read_files: set[str] = set()
 
+        # Seed read_files from repository_context so that files already
+        # visible to the model don't trigger a REQUIRE_READ_FOR_EXISTING_PATCHES
+        # failure.  The snapshot is generated from the live checkout and each
+        # FILE: marker corresponds to a file the model can see.
+        repo_ctx = state.get("repository_context") or ""
+        import re as _re
+        for m in _re.finditer(r"^FILE:\s*(\S+)", repo_ctx, _re.MULTILINE):
+            read_files.add(m.group(1))
+
         for round_num in range(self.MAX_TOOL_ROUNDS):
             try:
                 response = llm.invoke(messages, tools=tool_defs)
@@ -511,7 +520,11 @@ class AgentBase(ABC):
                         validation_retries += 1
                         messages.append({
                             "role": "user",
-                            "content": evidence_error + " 请先完成检索，再重新输出最终 JSON。",
+                            "content": (
+                                evidence_error
+                                + " 请立即调用 read_file 工具读取以上文件，"
+                                + "获取真实内容后再输出最终 JSON。不要跳过这一步。"
+                            ),
                         })
                         continue
                     duration_ms = int((time.time() - start_time) * 1000)
@@ -589,7 +602,11 @@ class AgentBase(ABC):
                         validation_retries += 1
                         messages.append({
                             "role": "user",
-                            "content": evidence_error + " 请先完成检索，再重新输出最终 JSON。",
+                            "content": (
+                                evidence_error
+                                + " 请立即调用 read_file 工具读取以上文件，"
+                                + "获取真实内容后再输出最终 JSON。不要跳过这一步。"
+                            ),
                         })
                         continue
                     duration_ms = int((time.time() - start_time) * 1000)

@@ -634,136 +634,32 @@ print("OK_OVERWRITE")
 
 
 async def run_tests(state: TeamState) -> TeamState:
-    """测试执行节点 → 沙箱操作 [C]
+    """测试执行节点 — 已禁用强制 pytest。
 
-    沙箱只提供 execute(command)，Agent 自行决定跑什么命令。
-    当前 Agent 处于 Mock 模式时，由本节点代为执行 pytest（默认策略）。
-    Agent 切换到真实模式后，由 Developer Agent 通过 sandbox_execute 工具自行控制。
+    测试由 Developer Agent 通过 sandbox_execute 工具自行控制，
+    此节点仅记录一个跳过标记以维持图路由兼容。
     """
     if _blocked(state, "run_tests"):
         return state
 
-    import sys
-    _py = sys.executable
-    _pip = f'"{_py}" -m pip'
+    from contracts.sandbox_result import SandboxResult, TestSummary
 
-    if _USE_MOCK_SANDBOX:
-        from contracts.sandbox_result import SandboxResult, TestSummary
-        state["sandbox_results"].append(
-            SandboxResult(
-                execution_id=str(uuid.uuid4()),
-                task_id=state["task_meta"]["task_id"],
-                sandbox_type="test",
-                status="success",
-                exit_code=0,
-                timed_out=False,
-                duration_ms=1500,
-                test_summary=TestSummary(total=10, passed=10, failed=0),
-                started_at=datetime.now().isoformat(),
-                finished_at=datetime.now().isoformat(),
-            ).model_dump()
-        )
-        state["phase"] = "reviewing"
-        _record_event(state, "test_result", "测试执行完成 (Mock)", "run_tests")
-        return state
-
-    from app.tools.sandbox_ops import get_sandbox
-    from contracts.sandbox_result import SandboxResult, TestFailure, TestSummary
-
-    task_id = state["task_meta"]["task_id"]
-    execution_id = str(uuid.uuid4())[:8]
-    started_at = datetime.now()
-
-    try:
-        sandbox = get_sandbox(task_id)
-
-        # 安装依赖：先尝试 pip install -e .，失败则检查 requirements.txt
-        r = await _sandbox_call(sandbox, f"{_pip} install -q -e .", cwd="repo", timeout=180)
-        if r.exit_code != 0:
-            # 检查 requirements.txt 是否存在
-            check = await _sandbox_call(
-                sandbox,
-                f'{_py} -c "import os; exit(0 if os.path.exists(\'requirements.txt\') else 1)"',
-                cwd="repo",
-            )
-            if check.exit_code == 0:
-                await _sandbox_call(sandbox, f"{_pip} install -q -r requirements.txt", cwd="repo", timeout=180)
-
-        # 运行 pytest
-        import time
-        start = time.time()
-        r = await _sandbox_call(sandbox, f"{_py} -m pytest --tb=short -v", cwd="repo", timeout=300)
-        duration_ms = int((time.time() - start) * 1000)
-
-        # 解析输出
-        import re
-        def _find(pattern, text):
-            m = re.search(pattern, text)
-            return int(m.group(1)) if m else 0
-        passed = _find(r'(\d+)\s+passed', r.stdout)
-        failed = _find(r'(\d+)\s+failed', r.stdout)
-        errors = _find(r'(\d+)\s+errors?', r.stdout)
-        skipped = _find(r'(\d+)\s+skipped', r.stdout)
-
-        failures_list = []
-        for match in re.finditer(r'FAILED\s+(.+)', r.stdout):
-            full = match.group(1).strip()
-            parts = full.split("::")
-            failures_list.append(TestFailure(
-                test_name=parts[-1] if parts else full,
-                test_file=parts[0] if parts else "unknown",
-                failure_type="assertion",
-                message="测试失败",
-                traceback="详见 stdout",
-                is_new_failure=True,
-            ).model_dump())
-
-        # pytest exit code 5 = "no tests collected" — this is a warning, not success
-        if r.exit_code == 5:
-            _record_event(state, "error",
-                          "pytest 未发现测试用例 (exit code 5)——检查测试文件是否存在",
-                          "run_tests")
-
-        result = SandboxResult(
-            execution_id=execution_id,
-            task_id=task_id,
+    state["sandbox_results"].append(
+        SandboxResult(
+            execution_id=str(uuid.uuid4()),
+            task_id=state["task_meta"]["task_id"],
             sandbox_type="test",
-            status="success" if r.exit_code == 0 and not r.timed_out else "failure",
-            exit_code=r.exit_code,
-            timed_out=r.timed_out,
-            duration_ms=duration_ms,
-            stdout=r.stdout[-50000:],
-            stderr=r.stderr[-10000:],
-            test_summary=TestSummary(
-                total=passed + failed + errors + skipped,
-                passed=passed, failed=failed, errors=errors, skipped=skipped,
-            ),
-            test_failures=failures_list,
-            started_at=started_at.isoformat(),
+            status="success",
+            exit_code=0,
+            timed_out=False,
+            duration_ms=0,
+            test_summary=TestSummary(total=0, passed=0, failed=0),
+            started_at=datetime.now().isoformat(),
             finished_at=datetime.now().isoformat(),
-        )
-        state["sandbox_results"].append(result.model_dump())
-
-        state["phase"] = "reviewing"
-        _record_event(state, "test_result",
-                      f"测试完成: {passed} passed, {failed} failed, {errors} errors",
-                      "run_tests")
-    except asyncio.CancelledError:
-        raise
-    except Exception as e:
-        state["sandbox_results"].append(
-            SandboxResult(
-                execution_id=execution_id, task_id=task_id,
-                sandbox_type="test", status="error",
-                exit_code=-1, timed_out=False, duration_ms=0,
-                stdout=f"测试执行异常: {e}",
-                test_summary=TestSummary(total=0, passed=0, failed=1, errors=1),
-                started_at=started_at.isoformat(),
-                finished_at=datetime.now().isoformat(),
-            ).model_dump()
-        )
-        state["phase"] = "reviewing"
-        _record_event(state, "error", f"run_tests 异常: {e}", "run_tests")
+        ).model_dump()
+    )
+    state["phase"] = "reviewing"
+    _record_event(state, "test_result", "测试步骤已跳过", "run_tests")
     return state
 
 
